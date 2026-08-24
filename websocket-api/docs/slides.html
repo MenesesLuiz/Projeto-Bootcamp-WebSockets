@@ -1,0 +1,657 @@
+<title>Streaming & WebSockets</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b1220;
+    --bg-panel:#111b2e;
+    --bg-panel-2:#0e1626;
+    --line:rgba(232,237,245,0.10);
+    --line-strong:rgba(232,237,245,0.20);
+    --ink:#e9edf6;
+    --ink-dim:#93a1ba;
+    --ink-faint:#5c6a86;
+    --signal-a:#33d6b5;
+    --signal-a-dim:rgba(51,214,181,0.14);
+    --signal-b:#ffb454;
+    --signal-b-dim:rgba(255,180,84,0.14);
+
+    --font-display:'IBM Plex Sans Condensed','Arial Narrow',sans-serif;
+    --font-body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+    --font-mono:'IBM Plex Mono','SFMono-Regular',Consolas,monospace;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  html{overflow:hidden;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-body);
+    overflow-x:hidden;
+  }
+  h1,h2,h3,p,ul{margin:0;}
+  ul{padding:0;list-style:none;}
+  button{font-family:inherit;color:inherit;background:none;border:0;cursor:pointer;}
+  :focus-visible{outline:2px solid var(--signal-a);outline-offset:3px;}
+
+  .deck{
+    position:relative;
+    height:100dvh;
+    width:100%;
+    display:flex;
+    flex-direction:column;
+  }
+
+  /* ---- progress rail ---- */
+  .rail{height:4px;flex:none;background:var(--bg-panel-2);}
+  .rail-fill{height:100%;width:8.33%;background:linear-gradient(90deg,var(--signal-a),var(--signal-b));transition:width .4s ease;}
+  @media (prefers-reduced-motion:reduce){ .rail-fill{transition:none;} }
+
+  /* ---- fullscreen toggle ---- */
+  .fs-toggle{
+    position:absolute;top:16px;right:20px;z-index:5;
+    width:36px;height:36px;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;
+    color:var(--ink-faint);border:1px solid var(--line);
+    font-size:1.05rem;
+  }
+  .fs-toggle:hover{color:var(--ink);border-color:var(--line-strong);}
+
+  /* ---- slides ---- */
+  #slides{position:relative;flex:1;min-height:0;}
+  .slide{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;justify-content:center;
+    padding:clamp(2.25rem,6vw,6rem) clamp(2.25rem,8vw,7.5rem);
+    opacity:0;transform:translateX(16px);
+    pointer-events:none;
+    transition:opacity .35s ease,transform .35s ease;
+  }
+  .slide.active{opacity:1;transform:none;pointer-events:auto;z-index:2;}
+  @media (prefers-reduced-motion:reduce){ .slide{transition:none;transform:none;} }
+
+  .slide-inner{max-width:1180px;width:100%;}
+
+  .eyebrow{
+    font-family:var(--font-mono);font-size:.8rem;font-weight:500;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--signal-a);
+    margin-bottom:1rem;
+  }
+  .slide-title{
+    font-family:var(--font-display);font-weight:700;
+    font-size:clamp(1.9rem,4.4vw,3.3rem);line-height:1.08;
+    letter-spacing:-.01em;color:var(--ink);
+    text-wrap:balance;
+    max-width:20ch;
+  }
+  .slide-title.big{font-size:clamp(2.2rem,5.4vw,4rem);max-width:16ch;}
+  .subtitle{
+    margin-top:.85rem;font-size:clamp(1rem,1.6vw,1.25rem);
+    color:var(--ink-dim);max-width:46ch;
+  }
+  .slide-body{margin-top:clamp(1.75rem,4vw,3rem);}
+  .caption{margin-top:1.1rem;font-size:.95rem;color:var(--ink-dim);max-width:56ch;}
+
+  /* ---- title slide ---- */
+  .slide--title{position:relative;overflow:hidden;justify-content:flex-end;}
+  .title-pulse{
+    position:absolute;top:0;right:0;bottom:0;width:46%;
+    display:flex;flex-direction:column;justify-content:center;gap:2.1rem;
+    padding-right:clamp(1rem,4vw,3rem);
+    opacity:.55;pointer-events:none;
+  }
+  .pulse-line{height:2px;background:var(--line-strong);position:relative;overflow:hidden;}
+  .pulse-line::after{
+    content:'';position:absolute;top:0;left:-30%;height:100%;width:30%;
+    background:linear-gradient(90deg,transparent,var(--signal-a),transparent);
+    animation:travel 3.2s linear infinite;
+  }
+  .pulse-line:nth-child(2)::after{background:linear-gradient(90deg,transparent,var(--signal-b),transparent);animation-duration:3.8s;animation-delay:.4s;}
+  .pulse-line:nth-child(3)::after{animation-duration:2.6s;animation-delay:.9s;}
+  .pulse-line:nth-child(4)::after{background:linear-gradient(90deg,transparent,var(--signal-b),transparent);animation-duration:4.4s;animation-delay:.2s;}
+  @keyframes travel{ from{left:-30%;} to{left:100%;} }
+  @media (prefers-reduced-motion:reduce){ .pulse-line::after{animation:none;left:20%;} }
+  .title-block{position:relative;z-index:1;max-width:60%;}
+  .kicker{
+    font-family:var(--font-mono);font-size:.82rem;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink-faint);margin-bottom:1.6rem;
+  }
+  .title-hero{
+    font-family:var(--font-display);font-weight:700;color:var(--ink);
+    font-size:clamp(2.6rem,7vw,5.4rem);line-height:1.02;letter-spacing:-.015em;
+    text-wrap:balance;
+  }
+  .title-hero em{font-style:normal;color:var(--signal-a);}
+
+  /* ---- agenda timeline ---- */
+  .timeline{display:flex;gap:6px;width:100%;max-width:760px;height:52px;margin-bottom:2rem;}
+  .timeline .seg{
+    border-radius:6px;display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-mono);font-size:.78rem;letter-spacing:.04em;
+    color:var(--bg);font-weight:600;
+  }
+  .timeline .seg.t1{flex:10;background:var(--signal-a);}
+  .timeline .seg.t2{flex:20;background:var(--ink-dim);color:var(--bg);}
+  .timeline .seg.t3{flex:30;background:var(--signal-b);}
+  .agenda-list{display:flex;flex-wrap:wrap;gap:2.5rem;}
+  .agenda-item{max-width:22ch;}
+  .agenda-item .mins{font-family:var(--font-mono);font-size:1.5rem;font-weight:600;}
+  .agenda-item.a1 .mins{color:var(--signal-a);}
+  .agenda-item.a2 .mins{color:var(--ink-dim);}
+  .agenda-item.a3 .mins{color:var(--signal-b);}
+  .agenda-item .label{margin-top:.25rem;font-size:1.02rem;color:var(--ink);}
+  .agenda-item .sub{margin-top:.15rem;font-size:.88rem;color:var(--ink-faint);}
+
+  /* ---- flow / node diagrams ---- */
+  .flow{display:flex;align-items:center;gap:0;flex-wrap:wrap;row-gap:1.5rem;}
+  .node{
+    border:1px solid var(--line-strong);background:var(--bg-panel);
+    border-radius:8px;padding:.9rem 1.5rem;
+    font-family:var(--font-mono);font-size:.98rem;color:var(--ink);white-space:nowrap;
+  }
+  .node.accent{border-color:var(--signal-b);background:var(--signal-b-dim);}
+  .arrow-seg{
+    display:flex;flex-direction:column;align-items:center;gap:.3rem;
+    flex:1 1 70px;min-width:56px;max-width:150px;padding:0 .5rem;
+    font-family:var(--font-mono);font-size:.72rem;letter-spacing:.02em;
+    color:var(--signal-a);text-align:center;
+  }
+  .arrow-seg.b{color:var(--signal-b);}
+  .arrow-seg .line{width:100%;height:2px;background:currentColor;position:relative;}
+  .arrow-seg .line::after{
+    content:'';position:absolute;right:0;top:50%;transform:translateY(-50%);
+    border:5px solid transparent;border-left-color:currentColor;border-right-width:0;
+  }
+  .arrow-seg.rev .line::after{
+    right:auto;left:0;border-left-width:0;border-right-color:currentColor;
+  }
+  .flow-note{margin-top:1.5rem;font-size:.9rem;color:var(--ink-faint);font-family:var(--font-mono);}
+
+  /* ---- duplex diagram ---- */
+  .duplex-wrap{display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap;}
+  .duplex-mid{display:flex;flex-direction:column;gap:.65rem;flex:1 1 200px;max-width:320px;}
+  .duplex-row{display:flex;align-items:center;gap:.5rem;font-family:var(--font-mono);font-size:.78rem;}
+  .duplex-row .line{flex:1;height:2px;background:var(--signal-a);position:relative;}
+  .duplex-row .line::after{content:'';position:absolute;right:0;top:50%;transform:translateY(-50%);border:5px solid transparent;border-left-color:var(--signal-a);border-right-width:0;}
+  .duplex-row.rev .line{background:var(--signal-b);}
+  .duplex-row.rev .line::after{right:auto;left:0;border-left-width:0;border-right-color:var(--signal-b);}
+  .duplex-row .lbl{color:var(--ink-dim);white-space:nowrap;}
+  .duplex-tag{
+    align-self:center;margin-top:.2rem;font-size:.72rem;color:var(--ink-faint);
+    text-align:center;letter-spacing:.08em;text-transform:uppercase;
+  }
+
+  /* ---- cards grid (4 alternatives) ---- */
+  .cards{display:flex;gap:1rem;flex-wrap:wrap;}
+  .card{
+    flex:1 1 220px;border:1px solid var(--line);background:var(--bg-panel);
+    border-radius:10px;padding:1.25rem 1.35rem;
+  }
+  .card.highlight{border-color:var(--signal-b);background:var(--signal-b-dim);}
+  .card h3{font-family:var(--font-mono);font-size:.92rem;color:var(--ink);letter-spacing:.02em;}
+  .card p{margin-top:.55rem;font-size:.9rem;color:var(--ink-dim);line-height:1.45;}
+  .card .tag{display:inline-block;margin-top:.7rem;font-family:var(--font-mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--signal-b);}
+
+  /* ---- typing / stream demo ---- */
+  .stream-box{
+    display:inline-block;border:1px solid var(--line-strong);background:var(--bg-panel);
+    border-radius:8px;padding:1.1rem 1.4rem;min-width:17ch;
+  }
+  .stream-text{font-family:var(--font-mono);font-size:1.15rem;white-space:nowrap;}
+  .stream-text .tok{
+    opacity:0;color:var(--signal-a);
+    transition:opacity .18s ease,color .45s ease;
+  }
+  .stream-text .tok.show{opacity:1;}
+  .stream-text .tok.show.new{color:var(--signal-b);transition:opacity .18s ease,color .05s ease;}
+  .stream-text .cursor{
+    display:inline-block;margin-left:2px;color:var(--signal-a);
+    animation:blink 1s steps(1,end) infinite;
+  }
+  @keyframes blink{ 50%{opacity:0;} }
+  @media (prefers-reduced-motion:reduce){
+    .stream-text .cursor{animation:none;}
+    .stream-text .tok{transition:none;}
+  }
+
+  /* ---- lifecycle chain ---- */
+  .chain{display:flex;align-items:center;flex-wrap:wrap;row-gap:1.25rem;}
+  .chain .pill{
+    font-family:var(--font-mono);font-size:.92rem;padding:.7rem 1.2rem;
+    border-radius:999px;border:1px solid var(--line-strong);background:var(--bg-panel);
+  }
+  .chain .pill.close{border-color:var(--ink-faint);color:var(--ink-dim);}
+  .chain .sep{flex:0 0 auto;margin:0 .6rem;color:var(--ink-faint);font-size:1.2rem;}
+
+  /* ---- decision guide ---- */
+  .decisions{display:flex;flex-direction:column;gap:.9rem;max-width:820px;}
+  .decision{
+    display:flex;align-items:center;justify-content:space-between;gap:1.5rem;
+    padding:1rem 1.3rem;border:1px solid var(--line);border-radius:8px;background:var(--bg-panel);
+    flex-wrap:wrap;
+  }
+  .decision .q{font-size:.98rem;color:var(--ink);max-width:44ch;}
+  .decision .a{font-family:var(--font-mono);font-size:.85rem;letter-spacing:.04em;text-transform:uppercase;color:var(--signal-a);white-space:nowrap;}
+
+  /* ---- chips ---- */
+  .chips{display:flex;flex-wrap:wrap;gap:.7rem;}
+  .chip{
+    font-family:var(--font-mono);font-size:.88rem;color:var(--ink);
+    border:1px solid var(--line-strong);border-radius:999px;padding:.5rem 1.05rem;
+  }
+
+  /* ---- two column split ---- */
+  .split{display:flex;gap:1.5rem;flex-wrap:wrap;}
+  .split-card{flex:1 1 260px;border-left:2px solid var(--signal-a);padding:.2rem 0 .2rem 1.2rem;}
+  .split-card.b{border-left-color:var(--signal-b);}
+  .split-card h3{font-family:var(--font-mono);font-size:.82rem;letter-spacing:.1em;text-transform:uppercase;color:var(--signal-a);}
+  .split-card.b h3{color:var(--signal-b);}
+  .split-card p{margin-top:.5rem;font-size:1rem;color:var(--ink);line-height:1.5;}
+
+  /* ---- checklist ---- */
+  .checklist{display:flex;flex-direction:column;gap:.65rem;}
+  .checklist li{display:flex;align-items:baseline;gap:.65rem;font-size:1rem;color:var(--ink);}
+  .checklist li::before{content:'→';color:var(--signal-a);font-family:var(--font-mono);}
+
+  /* ---- nav bar ---- */
+  .deck-nav{
+    flex:none;height:64px;display:flex;align-items:center;justify-content:center;
+    gap:1.4rem;border-top:1px solid var(--line);background:var(--bg-panel-2);
+  }
+  .deck-nav .arrow-btn{
+    width:34px;height:34px;border-radius:8px;border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:var(--ink-dim);
+  }
+  .deck-nav .arrow-btn:hover{color:var(--ink);border-color:var(--line-strong);}
+  .counter{font-family:var(--font-mono);font-size:.82rem;color:var(--ink-faint);letter-spacing:.04em;font-variant-numeric:tabular-nums;}
+  .counter .sep{margin:0 .3rem;}
+  .counter #cur{color:var(--ink);}
+  .dots{display:flex;gap:7px;}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--line-strong);}
+  .dot.active{background:var(--signal-a);}
+
+  /* ---- edge click zones ---- */
+  .clickzone{position:absolute;top:0;bottom:64px;width:64px;z-index:1;}
+  .clickzone.left{left:0;}
+  .clickzone.right{right:0;}
+
+  @media (max-width:640px){
+    .title-block{max-width:100%;}
+    .title-pulse{display:none;}
+    .clickzone{width:36px;}
+  }
+</style>
+
+<div class="deck">
+  <div class="rail"><div class="rail-fill" id="railFill"></div></div>
+  <button class="fs-toggle" id="fsToggle" aria-label="Alternar tela cheia">⤢</button>
+
+  <main id="slides">
+
+    <section class="slide slide--title active">
+      <div class="title-pulse" aria-hidden="true">
+        <div class="pulse-line"></div>
+        <div class="pulse-line"></div>
+        <div class="pulse-line"></div>
+        <div class="pulse-line"></div>
+      </div>
+      <div class="title-block">
+        <div class="kicker">Workshop 04 · Bootcamp AWS AI FDE — Agentic Payments</div>
+        <h1 class="title-hero">Streaming &amp;<br><em>WebSockets</em></h1>
+        <p class="subtitle">Como fazer o servidor falar primeiro.</p>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="eyebrow">Como vai funcionar</div>
+        <h2 class="slide-title">60 minutos, 3 blocos</h2>
+        <div class="slide-body">
+          <div class="timeline" aria-hidden="true">
+            <div class="seg t1">10 min</div>
+            <div class="seg t2">20 min</div>
+            <div class="seg t3">30 min</div>
+          </div>
+          <div class="agenda-list">
+            <div class="agenda-item a1">
+              <div class="mins">10 min</div>
+              <div class="label">Teoria</div>
+              <div class="sub">stream, SSE, WebSocket</div>
+            </div>
+            <div class="agenda-item a2">
+              <div class="mins">20 min</div>
+              <div class="label">Mão na massa</div>
+              <div class="sub">live coding guiado</div>
+            </div>
+            <div class="agenda-item a3">
+              <div class="mins">30 min</div>
+              <div class="label">Dúvidas + atividade opcional</div>
+              <div class="sub">pra quem quiser ir além</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="eyebrow">Ponto de partida</div>
+        <h2 class="slide-title">No REST, o servidor só fala quando é perguntado</h2>
+        <div class="slide-body">
+          <div class="flow">
+            <div class="node">Cliente</div>
+            <div class="arrow-seg"><span>pergunta (GET)</span><div class="line"></div></div>
+            <div class="node">Servidor</div>
+            <div class="arrow-seg b rev"><div class="line"></div><span>responde</span></div>
+            <div class="node">Cliente</div>
+          </div>
+          <p class="flow-note">mudou de novo? → cliente precisa perguntar de novo.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="eyebrow">O problema</div>
+        <h2 class="slide-title big">Como o cliente sabe que algo mudou — sem ficar perguntando toda hora?</h2>
+        <div class="slide-body">
+          <div class="chips">
+            <span class="chip">chat</span>
+            <span class="chip">notificação</span>
+            <span class="chip">status de pagamento</span>
+            <span class="chip">dashboard ao vivo</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="eyebrow">As alternativas</div>
+        <h2 class="slide-title">Quatro jeitos de resolver isso</h2>
+        <div class="slide-body">
+          <div class="cards">
+            <div class="card">
+              <h3>Polling</h3>
+              <p>Cliente pergunta de novo a cada X segundos, sempre.</p>
+            </div>
+            <div class="card">
+              <h3>Long polling</h3>
+              <p>Servidor segura a resposta até ter algo novo pra contar.</p>
+            </div>
+            <div class="card">
+              <h3>SSE</h3>
+              <p>Servidor manda quando quiser — só nesse sentido.</p>
+            </div>
+            <div class="card highlight">
+              <h3>WebSocket</h3>
+              <p>Canal aberto: os dois lados mandam quando quiserem.</p>
+              <span class="tag">nosso foco hoje</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="eyebrow">Conceito</div>
+        <h2 class="slide-title">Stream: dado chegando aos pedaços, não tudo de uma vez</h2>
+        <div class="slide-body">
+          <div class="stream-box">
+            <span class="stream-text" id="streamText"><span class="tok">O </span><span class="tok">pagamento </span><span class="tok">foi </span><span class="tok">aprovado.</span><span class="cursor" aria-hidden="true">▍</span></span>
+          </div>
+          <p class="caption">É assim que respostas de LLM chegam — token a token, não a frase inteira de uma vez.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="eyebrow">O protocolo</div>
+        <h2 class="slide-title">Um aperto de mão, depois o canal fica aberto</h2>
+        <div class="slide-body">
+          <div class="flow">
+            <div class="node">Cliente</div>
+            <div class="arrow-seg"><span>GET + Upgrade: websocket</span><div class="line"></div></div>
+            <div class="node">Servidor</div>
+            <div class="arrow-seg b rev"><div class="line"></div><span>101 Switching Protocols</span></div>
+            <div class="node">Cliente</div>
+          </div>
+          <div class="duplex-wrap" style="margin-top:2.25rem;">
+            <div class="node">Cliente</div>
+            <div class="duplex-mid">
+              <div class="duplex-row"><span class="lbl">mensagem</span><div class="line"></div></div>
+              <div class="duplex-row rev"><div class="line"></div><span class="lbl">mensagem</span></div>
+              <div class="duplex-tag">canal aberto · full-duplex</div>
+            </div>
+            <div class="node accent">Servidor</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="eyebrow">Na prática</div>
+        <h2 class="slide-title">O ciclo de vida de uma conexão</h2>
+        <div class="slide-body">
+          <div class="chain">
+            <span class="pill">open</span>
+            <span class="sep">→</span>
+            <span class="pill">message <em style="font-style:normal;color:var(--ink-faint);">(N×, os 2 lados)</em></span>
+            <span class="sep">→</span>
+            <span class="pill close">close / error</span>
+          </div>
+          <p class="caption">ping / pong mantêm a conexão viva enquanto ninguém tem nada novo pra dizer.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="eyebrow">Quando usar o quê</div>
+        <h2 class="slide-title">Guia rápido de decisão</h2>
+        <div class="slide-body">
+          <div class="decisions">
+            <div class="decision">
+              <span class="q">Só atualização servidor → cliente, via HTTP?</span>
+              <span class="a">SSE</span>
+            </div>
+            <div class="decision">
+              <span class="q">Via de mão dupla, baixa latência, muito evento?</span>
+              <span class="a">WebSocket</span>
+            </div>
+            <div class="decision">
+              <span class="q">Atualizar a cada X segundos já resolve?</span>
+              <span class="a">Polling</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="eyebrow">No mundo real</div>
+        <h2 class="slide-title">Você já usa isso todo dia</h2>
+        <div class="slide-body">
+          <div class="chips">
+            <span class="chip">chat</span>
+            <span class="chip">notificações</span>
+            <span class="chip">dashboards ao vivo</span>
+            <span class="chip">pagamento assíncrono</span>
+            <span class="chip">cursores colaborativos</span>
+            <span class="chip">streaming de LLM</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="eyebrow">Mão na massa</div>
+        <h2 class="slide-title">Chat em tempo real, com um agente que responde em streaming</h2>
+        <div class="slide-body">
+          <div class="split">
+            <div class="split-card">
+              <h3>WebSocket</h3>
+              <p>Broadcast entre usuários conectados ao mesmo tempo.</p>
+            </div>
+            <div class="split-card b">
+              <h3>Streaming</h3>
+              <p>Resposta do agente chega em pedaços, não de uma vez.</p>
+            </div>
+          </div>
+          <p class="caption">Tudo rodando em <span style="color:var(--ink);font-family:var(--font-mono);">localhost</span> — sem depender de AWS.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="eyebrow">Pra fechar</div>
+        <h2 class="slide-title">Dúvidas + atividade opcional</h2>
+        <div class="slide-body">
+          <ul class="checklist">
+            <li>Lista de usuários online</li>
+            <li>Indicador "digitando..."</li>
+            <li>Salas separadas</li>
+            <li>Streaming vs. resposta única</li>
+            <li>Reconexão automática</li>
+            <li>Bônus: status de pagamento simulado, em streaming</li>
+          </ul>
+          <p class="caption">De brinde: o mesmo padrão rodando de verdade na AWS — só demo, ninguém precisa de acesso.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="clickzone left" id="zoneLeft" aria-hidden="true"></div>
+  <div class="clickzone right" id="zoneRight" aria-hidden="true"></div>
+
+  <nav class="deck-nav">
+    <button class="arrow-btn" id="prevBtn" aria-label="Slide anterior">‹</button>
+    <div class="counter"><span id="cur">01</span><span class="sep">/</span><span id="total">12</span></div>
+    <div class="dots" id="dots"></div>
+    <button class="arrow-btn" id="nextBtn" aria-label="Próximo slide">›</button>
+  </nav>
+</div>
+
+<script>
+  (function(){
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+    var total = slides.length;
+    var idx = 0;
+
+    var STREAM_SLIDE_INDEX = slides.findIndex(function(s){
+      return s.querySelector('#streamText');
+    });
+    var typingTimer = null;
+    var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function resetTokens(){
+      var toks = document.querySelectorAll('#streamText .tok');
+      for (var i = 0; i < toks.length; i++) { toks[i].classList.remove('show', 'new'); }
+    }
+    function stopTyping(){
+      if (typingTimer) { clearTimeout(typingTimer); typingTimer = null; }
+      resetTokens();
+    }
+    function startTyping(){
+      if (typingTimer) { clearTimeout(typingTimer); typingTimer = null; }
+      resetTokens();
+      var toks = Array.prototype.slice.call(document.querySelectorAll('#streamText .tok'));
+      if (!toks.length) return;
+      if (reduceMotion) {
+        toks.forEach(function(t){ t.classList.add('show'); });
+        return;
+      }
+      var i = 0;
+      function tick(){
+        toks[i].classList.add('show', 'new');
+        (function(tok){ setTimeout(function(){ tok.classList.remove('new'); }, 320); })(toks[i]);
+        i++;
+        if (i < toks.length) {
+          typingTimer = setTimeout(tick, 420);
+        } else {
+          typingTimer = setTimeout(function(){
+            resetTokens();
+            i = 0;
+            typingTimer = setTimeout(tick, 350);
+          }, 2600);
+        }
+      }
+      tick();
+    }
+
+    var railFill = document.getElementById('railFill');
+    var curEl = document.getElementById('cur');
+    var totalEl = document.getElementById('total');
+    var dotsWrap = document.getElementById('dots');
+
+    totalEl.textContent = String(total).padStart(2,'0');
+
+    slides.forEach(function(_, i){
+      var dot = document.createElement('button');
+      dot.className = 'dot';
+      dot.setAttribute('aria-label', 'Ir para slide ' + (i+1));
+      dot.addEventListener('click', function(){ goTo(i); });
+      dotsWrap.appendChild(dot);
+    });
+    var dots = Array.prototype.slice.call(dotsWrap.children);
+
+    function render(){
+      slides.forEach(function(s, i){ s.classList.toggle('active', i === idx); });
+      dots.forEach(function(d, i){ d.classList.toggle('active', i === idx); });
+      railFill.style.width = ((idx + 1) / total * 100) + '%';
+      curEl.textContent = String(idx + 1).padStart(2, '0');
+      if (history.replaceState) { history.replaceState(null, '', '#' + (idx + 1)); }
+      if (idx === STREAM_SLIDE_INDEX) { startTyping(); } else { stopTyping(); }
+    }
+    function goTo(i){ idx = Math.max(0, Math.min(total - 1, i)); render(); }
+    function next(){ goTo(idx + 1); }
+    function prev(){ goTo(idx - 1); }
+
+    document.getElementById('nextBtn').addEventListener('click', next);
+    document.getElementById('prevBtn').addEventListener('click', prev);
+    document.getElementById('zoneLeft').addEventListener('click', prev);
+    document.getElementById('zoneRight').addEventListener('click', next);
+
+    window.addEventListener('keydown', function(e){
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' '){
+        e.preventDefault(); next();
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp'){
+        e.preventDefault(); prev();
+      } else if (e.key === 'Home'){ e.preventDefault(); goTo(0); }
+      else if (e.key === 'End'){ e.preventDefault(); goTo(total - 1); }
+    });
+
+    var touchStartX = null;
+    var slidesWrap = document.getElementById('slides');
+    slidesWrap.addEventListener('touchstart', function(e){ touchStartX = e.touches[0].clientX; }, {passive:true});
+    slidesWrap.addEventListener('touchend', function(e){
+      if (touchStartX === null) return;
+      var dx = e.changedTouches[0].clientX - touchStartX;
+      if (Math.abs(dx) > 50) { dx < 0 ? next() : prev(); }
+      touchStartX = null;
+    }, {passive:true});
+
+    var fsToggle = document.getElementById('fsToggle');
+    fsToggle.addEventListener('click', function(){
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen();
+      } else if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    });
+
+    var initial = parseInt(String(location.hash).replace('#',''), 10);
+    if (!isNaN(initial) && initial >= 1 && initial <= total) { idx = initial - 1; }
+    render();
+  })();
+</script>
