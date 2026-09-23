@@ -3,13 +3,26 @@ import { useChatSocket } from "./useChatSocket";
 import type { Bubble, ConnectionStatus } from "./types";
 
 const DEFAULT_ROOM = "global";
-const AVAILABLE_ROOMS = ["global", "sala-2"];
 
 function App() {
-  const { status, bubbles, onlineUsers, typingUsers, join, sendChat, setTyping } = useChatSocket();
+  const {
+    status,
+    bubbles,
+    onlineUsers,
+    typingUsers,
+    currentRoom,
+    availableRooms,
+    roomError,
+    join,
+    switchRoom,
+    createRoom,
+    sendChat,
+    setTyping,
+  } = useChatSocket();
   const [username, setUsername] = useState("");
   const [hasJoined, setHasJoined] = useState(false);
   const [draft, setDraft] = useState("");
+  const [newRoomName, setNewRoomName] = useState("");
   const listRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
@@ -36,6 +49,20 @@ function App() {
   function handleDraftChange(value: string) {
     setDraft(value);
     setTyping(value.trim().length > 0);
+  }
+
+  function handleSwitchRoom(room: string) {
+    if (room === currentRoom) return;
+    setTyping(false);
+    switchRoom(room);
+  }
+
+  function handleCreateRoom(event: FormEvent) {
+    event.preventDefault();
+    const trimmed = newRoomName.trim();
+    if (!trimmed) return;
+    createRoom(trimmed);
+    setNewRoomName("");
   }
 
   if (!hasJoined) {
@@ -82,13 +109,34 @@ function App() {
             <h2>Salas disponíveis</h2>
           </div>
           <ul className="room-list">
-            {AVAILABLE_ROOMS.map((room) => (
-              <li key={room} className={`room-card ${room === DEFAULT_ROOM ? "current-room" : ""}`}>
-                <span>#{room}</span>
-                {room === DEFAULT_ROOM && <small>atual</small>}
+            {availableRooms.map((room) => (
+              <li key={room}>
+                <button
+                  type="button"
+                  className={`room-card ${room === currentRoom ? "current-room" : ""}`}
+                  onClick={() => handleSwitchRoom(room)}
+                  disabled={room === currentRoom}
+                >
+                  <span>#{room}</span>
+                  {room === currentRoom && <small>atual</small>}
+                </button>
               </li>
             ))}
           </ul>
+          <form onSubmit={handleCreateRoom} className="room-create-form">
+            <input
+              type="text"
+              placeholder="Nome da nova sala"
+              value={newRoomName}
+              onChange={(event) => setNewRoomName(event.target.value)}
+              maxLength={24}
+              aria-label="Nome da nova sala"
+            />
+            <button type="submit" disabled={status !== "open" || !newRoomName.trim()}>
+              Criar sala
+            </button>
+          </form>
+          {roomError && <p className="room-error">{roomError}</p>}
         </div>
       </aside>
 

@@ -10,6 +10,10 @@ import { logger } from "../utils/logger";
 const log = logger.child("ws");
 const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173";
 
+function sendEvent(socket: WebSocket, event: import("./protocol").ServerEvent): void {
+  if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(event));
+}
+
 export type ChatServer = {
   wss: WebSocketServer;
   registry: ConnectionRegistry;
@@ -40,8 +44,16 @@ export function createChatServer(server: HttpServer): ChatServer {
     registry.broadcastToRoom(room, { type: "presence", usernames: registry.getUsernames(room) });
   }
 
+  function broadcastRooms(): void {
+    registry.broadcastToAll({ type: "rooms", rooms: registry.getRooms() });
+  }
+
   async function handleMessage(socket: WebSocket, message: ClientMessage): Promise<void> {
     if (message.type === "join") {
+      if (!registry.hasRoom(message.room)) {
+        sendEvent(socket, { type: "error", message: `Sala inexistente: ${message.room}` });
+        return;
+      }
       const client = registry.register(socket, message.username, message.room);
       log.info("client joined", { username: client.username, room: client.room });
       registry.broadcastToRoom(client.room, { type: "system", text: `${client.username} entrou no chat` });
@@ -52,6 +64,44 @@ export function createChatServer(server: HttpServer): ChatServer {
     const client = registry.get(socket);
     if (!client) {
       log.warn("chat message received before join, ignoring");
+      return;
+    }
+
+    if (message.type === "create_room") {
+      const room = registry.createRoom(message.name);
+      if (!room) {
+        sendEvent(socket, { type: "error", message: `A sala ${message.name} já existe` });
+        return;
+      }
+      broadcastRooms();
+      return;
+    }
+
+    if (message.type === "switch_room") {
+      if (!registry.hasRoom(message.room)) {
+        sendEvent(socket, { type: "error", message: `Sala inexistente: ${message.room}` });
+        return;
+      }
+      const previousRoom = client.room;
+      if (previousRoom === message.room) {
+        sendEvent(socket, { type: "room_changed", room: message.room });
+        return;
+      }
+
+      registry.moveToRoom(socket, message.room);
+      sendEvent(socket, { type: "room_changed", room: message.room });
+
+      registry.broadcastToRoom(previousRoom, {
+        type: "system",
+        text: `${client.username} saiu do chat`,
+      });
+      broadcastPresence(previousRoom);
+
+      registry.broadcastToRoom(message.room, {
+        type: "system",
+        text: `${client.username} entrou no chat`,
+      });
+      broadcastPresence(message.room);
       return;
     }
 
@@ -79,6 +129,7 @@ export function createChatServer(server: HttpServer): ChatServer {
 
   wss.on("connection", (socket: WebSocket) => {
     log.info("client connected", { totalClients: wss.clients.size });
+    sendEvent(socket, { type: "rooms", rooms: registry.getRooms() });
 
     socket.on("message", (raw) => {
       const parsed = parseClientMessage(raw.toString());

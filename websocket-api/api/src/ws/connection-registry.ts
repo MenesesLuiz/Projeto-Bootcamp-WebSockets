@@ -15,6 +15,10 @@ export type ChatClient = {
  */
 export class ConnectionRegistry {
   private readonly clients = new Map<WebSocket, ChatClient>();
+  private readonly rooms = new Map<string, string>([
+    ["global", "global"],
+    ["sala-2", "sala-2"],
+  ]);
 
   /** Registers a socket once it has sent a valid `join` message. */
   register(socket: WebSocket, username: string, room: string): ChatClient {
@@ -25,6 +29,27 @@ export class ConnectionRegistry {
 
   get(socket: WebSocket): ChatClient | undefined {
     return this.clients.get(socket);
+  }
+
+  moveToRoom(socket: WebSocket, room: string): ChatClient | undefined {
+    const client = this.clients.get(socket);
+    if (client) client.room = room;
+    return client;
+  }
+
+  hasRoom(room: string): boolean {
+    return this.rooms.has(this.roomKey(room));
+  }
+
+  createRoom(name: string): string | undefined {
+    const key = this.roomKey(name);
+    if (this.rooms.has(key)) return undefined;
+    this.rooms.set(key, name);
+    return name;
+  }
+
+  getRooms(): string[] {
+    return [...this.rooms.values()];
   }
 
   unregister(socket: WebSocket): ChatClient | undefined {
@@ -52,5 +77,17 @@ export class ConnectionRegistry {
         socket.send(payload);
       }
     }
+  }
+
+  /** Sends a catalog event to every connected client, regardless of room. */
+  broadcastToAll(event: ServerEvent): void {
+    const payload = JSON.stringify(event);
+    for (const socket of this.clients.keys()) {
+      if (socket.readyState === socket.OPEN) socket.send(payload);
+    }
+  }
+
+  private roomKey(room: string): string {
+    return room.toLocaleLowerCase();
   }
 }

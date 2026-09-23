@@ -30,6 +30,9 @@ export function useChatSocket() {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [currentRoom, setCurrentRoom] = useState("global");
+  const [availableRooms, setAvailableRooms] = useState<string[]>([]);
+  const [roomError, setRoomError] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
   const usernameRef = useRef("");
   const typingActiveRef = useRef(false);
@@ -46,6 +49,25 @@ export function useChatSocket() {
 
     socket.addEventListener("message", (event) => {
       const serverEvent = JSON.parse(event.data as string) as ServerEvent;
+
+      if (serverEvent.type === "room_changed") {
+        setCurrentRoom(serverEvent.room);
+        setBubbles([]);
+        setOnlineUsers([]);
+        setTypingUsers([]);
+        return;
+      }
+
+      if (serverEvent.type === "rooms") {
+        setAvailableRooms(serverEvent.rooms);
+        setRoomError("");
+        return;
+      }
+
+      if (serverEvent.type === "error") {
+        setRoomError(serverEvent.message);
+        return;
+      }
 
       if (serverEvent.type === "presence") {
         setOnlineUsers(serverEvent.usernames);
@@ -124,7 +146,17 @@ export function useChatSocket() {
 
   const join = useCallback((username: string, room = "global") => {
     usernameRef.current = username;
+    setCurrentRoom(room);
     socketRef.current?.send(JSON.stringify({ type: "join", username, room }));
+  }, []);
+
+  const switchRoom = useCallback((room: string) => {
+    socketRef.current?.send(JSON.stringify({ type: "switch_room", room }));
+  }, []);
+
+  const createRoom = useCallback((name: string) => {
+    setRoomError("");
+    socketRef.current?.send(JSON.stringify({ type: "create_room", name }));
   }, []);
 
   const sendChat = useCallback((text: string) => {
@@ -161,5 +193,18 @@ export function useChatSocket() {
     }, TYPING_STOP_DELAY_MS);
   }, []);
 
-  return { status, bubbles, onlineUsers, typingUsers, join, sendChat, setTyping };
+  return {
+    status,
+    bubbles,
+    onlineUsers,
+    typingUsers,
+    currentRoom,
+    availableRooms,
+    roomError,
+    join,
+    switchRoom,
+    createRoom,
+    sendChat,
+    setTyping,
+  };
 }

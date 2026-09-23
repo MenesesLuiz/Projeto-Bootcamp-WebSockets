@@ -23,6 +23,14 @@ function setTyping(socket: WebSocket, isTyping: boolean): void {
   socket.send(JSON.stringify({ type: "typing", isTyping }));
 }
 
+function switchRoom(socket: WebSocket, room: string): void {
+  socket.send(JSON.stringify({ type: "switch_room", room }));
+}
+
+function createRoom(socket: WebSocket, name: string): void {
+  socket.send(JSON.stringify({ type: "create_room", name }));
+}
+
 describe("chat WebSocket", () => {
   let server: TestServer;
   let sockets: WebSocket[];
@@ -105,6 +113,56 @@ describe("chat WebSocket", () => {
     say(alice.socket, "mensagem da global");
     const received = await carol.events.waitFor((event) => event.type === "chat");
     expect(received).toMatchObject({ username: "alice", text: "mensagem da global" });
+  });
+
+  it("moves a client between rooms and updates each room's presence", async () => {
+    const alice = await openClient("alice", "global");
+    const bob = await openClient("bob", "global");
+    const carol = await openClient("carol", "sala-2");
+
+    switchRoom(alice.socket, "sala-2");
+
+    const changed = await alice.events.waitFor((event) => event.type === "room_changed");
+    expect(changed).toEqual({ type: "room_changed", room: "sala-2" });
+
+    await bob.events.waitFor((event) => event.type === "system" && event.text === "alice saiu do chat");
+    await carol.events.waitFor((event) => event.type === "system" && event.text === "alice entrou no chat");
+
+    say(alice.socket, "agora estou na sala 2");
+    const received = await carol.events.waitFor((event) => event.type === "chat");
+    expect(received).toMatchObject({ username: "alice", text: "agora estou na sala 2" });
+    await expect(
+      bob.events.waitFor((event) => event.type === "chat" && event.username === "alice", 250),
+    ).rejects.toThrow();
+  });
+
+  it("creates a room and broadcasts the updated room catalog", async () => {
+    const alice = await openClient("alice");
+    const bob = await openClient("bob");
+
+    createRoom(alice.socket, "workshop");
+
+    const aliceRooms = await alice.events.waitFor(
+      (event) => event.type === "rooms" && event.rooms.includes("workshop"),
+    );
+    const bobRooms = await bob.events.waitFor(
+      (event) => event.type === "rooms" && event.rooms.includes("workshop"),
+    );
+
+    expect(aliceRooms).toMatchObject({ rooms: ["global", "sala-2", "workshop"] });
+    expect(bobRooms).toMatchObject({ rooms: ["global", "sala-2", "workshop"] });
+  });
+
+  it("rejects duplicate room names without changing the catalog", async () => {
+    const alice = await openClient("alice");
+    const bob = await openClient("bob");
+
+    createRoom(alice.socket, "Workshop");
+    await alice.events.waitFor((event) => event.type === "rooms" && event.rooms.includes("Workshop"));
+
+    createRoom(bob.socket, "workshop");
+    const error = await bob.events.waitFor((event) => event.type === "error");
+    expect(error).toEqual({ type: "error", message: "A sala workshop já existe" });
   });
 
   it("relays typing status to everyone except the sender", async () => {

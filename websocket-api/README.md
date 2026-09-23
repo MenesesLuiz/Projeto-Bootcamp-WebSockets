@@ -57,6 +57,8 @@ Todo frame trocado é um único objeto JSON com um campo `type`.
 | `type`  | Payload                    | Quando enviar                          |
 |---------|-----------------------------|-----------------------------------------|
 | `join`  | `{ type: "join", username, room }` | Uma vez, ao conectar, antes de tudo mais |
+| `switch_room` | `{ type: "switch_room", room }` | Ao trocar de sala                      |
+| `create_room` | `{ type: "create_room", name }` | Ao criar uma nova sala                 |
 | `chat`  | `{ type: "chat", text }`     | A cada mensagem enviada no chat          |
 | `typing` | `{ type: "typing", isTyping }` | Ao começar e depois de parar de digitar |
 
@@ -71,6 +73,9 @@ do jeito que qualquer bot de chat com "mention" costuma funcionar (ex.: `@bot` n
 | `system`        | `{ type: "system", text }`                             | Alguém entrou ou saiu do chat                       |
 | `chat`          | `{ type: "chat", id, username, text, createdAt }`       | Mensagem de um usuário, para todo mundo (inclusive quem enviou) |
 | `presence`      | `{ type: "presence", usernames }`                      | Lista atual de conexões online                      |
+| `rooms`         | `{ type: "rooms", rooms }`                             | Catálogo atual de salas                             |
+| `error`         | `{ type: "error", message }`                           | Rejeição de uma ação                               |
+| `room_changed`  | `{ type: "room_changed", room }`                       | Confirma a troca de sala                           |
 | `typing`        | `{ type: "typing", username, isTyping }`              | Indica quem começou ou parou de digitar             |
 | `agent_start`   | `{ type: "agent_start", id }`                           | O agente começou a responder - abre uma bolha nova   |
 | `agent_chunk`   | `{ type: "agent_chunk", id, text }`                     | Um pedaço da resposta - concatene na bolha `id`      |

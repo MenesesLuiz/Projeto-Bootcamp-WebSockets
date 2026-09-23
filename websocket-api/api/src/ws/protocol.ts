@@ -9,10 +9,23 @@ import { z } from "zod";
 
 // ---- client -> server -------------------------------------------------
 
+export const AVAILABLE_ROOMS = ["global", "sala-2"] as const;
+const roomNameSchema = z.string().trim().min(1, "Room is required").max(24, "Room name is too long");
+
 export const joinMessageSchema = z.object({
   type: z.literal("join"),
   username: z.string().trim().min(1, "Username is required").max(24, "Username is too long"),
-  room: z.string().trim().min(1, "Room is required").max(24, "Room name is too long").default("global"),
+  room: roomNameSchema.default("global"),
+});
+
+export const switchRoomMessageSchema = z.object({
+  type: z.literal("switch_room"),
+  room: roomNameSchema,
+});
+
+export const createRoomMessageSchema = z.object({
+  type: z.literal("create_room"),
+  name: roomNameSchema,
 });
 
 export const chatMessageSchema = z.object({
@@ -27,6 +40,8 @@ export const typingMessageSchema = z.object({
 
 export const clientMessageSchema = z.discriminatedUnion("type", [
   joinMessageSchema,
+  switchRoomMessageSchema,
+  createRoomMessageSchema,
   chatMessageSchema,
   typingMessageSchema,
 ]);
@@ -80,6 +95,21 @@ export type PresenceEvent = {
   usernames: string[];
 };
 
+export type RoomsEvent = {
+  type: "rooms";
+  rooms: string[];
+};
+
+export type ErrorEvent = {
+  type: "error";
+  message: string;
+};
+
+export type RoomChangedEvent = {
+  type: "room_changed";
+  room: string;
+};
+
 /**
  * The agent's reply streams as three events - start, one or more chunks,
  * end - the same shape real LLM streaming APIs use (e.g. a message start,
@@ -94,6 +124,9 @@ export type ServerEvent =
   | SystemEvent
   | ChatEvent
   | PresenceEvent
+  | RoomsEvent
+  | ErrorEvent
+  | RoomChangedEvent
   | TypingEvent
   | AgentStartEvent
   | AgentChunkEvent
