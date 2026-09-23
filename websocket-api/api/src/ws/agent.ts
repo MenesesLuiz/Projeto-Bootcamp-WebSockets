@@ -43,21 +43,25 @@ function toChunks(reply: string): string[] {
 }
 
 /**
- * Streams a simulated agent reply to everyone connected: an `agent_start`
+ * Streams a simulated agent reply to everyone in the same room: an `agent_start`
  * event opens a new bubble, one `agent_chunk` per word grows it, and
  * `agent_end` closes it. Broadcasting (not just replying to the sender)
  * keeps every open tab in sync, same as a human chat message.
  */
-export async function streamAgentReply(registry: ConnectionRegistry, incomingText: string): Promise<void> {
+export async function streamAgentReply(
+  registry: ConnectionRegistry,
+  room: string,
+  incomingText: string,
+): Promise<void> {
   const id = randomUUID();
   const chunks = toChunks(pickReply(incomingText));
 
-  registry.broadcast({ type: "agent_start", id });
+  registry.broadcastToRoom(room, { type: "agent_start", id });
 
   for (const chunk of chunks) {
     await sleep(CHUNK_DELAY_MS);
-    registry.broadcast({ type: "agent_chunk", id, text: chunk });
+    registry.broadcastToRoom(room, { type: "agent_chunk", id, text: chunk });
   }
 
-  registry.broadcast({ type: "agent_end", id });
+  registry.broadcastToRoom(room, { type: "agent_end", id });
 }

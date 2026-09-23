@@ -5,6 +5,7 @@ import type { ServerEvent } from "./protocol";
 export type ChatClient = {
   id: string;
   username: string;
+  room: string;
 };
 
 /**
@@ -16,8 +17,8 @@ export class ConnectionRegistry {
   private readonly clients = new Map<WebSocket, ChatClient>();
 
   /** Registers a socket once it has sent a valid `join` message. */
-  register(socket: WebSocket, username: string): ChatClient {
-    const client: ChatClient = { id: randomUUID(), username };
+  register(socket: WebSocket, username: string, room: string): ChatClient {
+    const client: ChatClient = { id: randomUUID(), username, room };
     this.clients.set(socket, client);
     return client;
   }
@@ -36,21 +37,18 @@ export class ConnectionRegistry {
     return this.clients.size;
   }
 
-  /** Returns one username per active connection; duplicate names are allowed. */
-  getUsernames(): string[] {
-    return Array.from(this.clients.values(), ({ username }) => username);
+  /** Returns one username per active connection in `room`; duplicate names are allowed. */
+  getUsernames(room: string): string[] {
+    return Array.from(this.clients.values())
+      .filter((client) => client.room === room)
+      .map(({ username }) => username);
   }
 
-  /** Sends `event` to every connected client whose socket is still open. */
-  broadcast(event: ServerEvent): void {
-    this.broadcastExcept(event);
-  }
-
-  /** Sends `event` to every connected client except `excludedSocket`. */
-  broadcastExcept(event: ServerEvent, excludedSocket?: WebSocket): void {
+  /** Sends `event` to connected clients in `room`, optionally excluding one socket. */
+  broadcastToRoom(room: string, event: ServerEvent, excludedSocket?: WebSocket): void {
     const payload = JSON.stringify(event);
-    for (const socket of this.clients.keys()) {
-      if (socket !== excludedSocket && socket.readyState === socket.OPEN) {
+    for (const [socket, client] of this.clients) {
+      if (client.room === room && socket !== excludedSocket && socket.readyState === socket.OPEN) {
         socket.send(payload);
       }
     }

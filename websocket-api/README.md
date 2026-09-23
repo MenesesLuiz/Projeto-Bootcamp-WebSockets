@@ -56,7 +56,7 @@ Todo frame trocado é um único objeto JSON com um campo `type`.
 
 | `type`  | Payload                    | Quando enviar                          |
 |---------|-----------------------------|-----------------------------------------|
-| `join`  | `{ type: "join", username }` | Uma vez, ao conectar, antes de tudo mais |
+| `join`  | `{ type: "join", username, room }` | Uma vez, ao conectar, antes de tudo mais |
 | `chat`  | `{ type: "chat", text }`     | A cada mensagem enviada no chat          |
 | `typing` | `{ type: "typing", isTyping }` | Ao começar e depois de parar de digitar |
 

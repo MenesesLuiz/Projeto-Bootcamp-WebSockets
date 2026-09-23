@@ -122,9 +122,9 @@ export function useChatSocket() {
     };
   }, []);
 
-  const join = useCallback((username: string) => {
+  const join = useCallback((username: string, room = "global") => {
     usernameRef.current = username;
-    socketRef.current?.send(JSON.stringify({ type: "join", username }));
+    socketRef.current?.send(JSON.stringify({ type: "join", username, room }));
   }, []);
 
   const sendChat = useCallback((text: string) => {

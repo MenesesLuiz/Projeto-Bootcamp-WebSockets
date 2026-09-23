@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useChatSocket } from "./useChatSocket";
 import type { Bubble, ConnectionStatus } from "./types";
 
+const DEFAULT_ROOM = "global";
+const AVAILABLE_ROOMS = ["global", "sala-2"];
+
 function App() {
   const { status, bubbles, onlineUsers, typingUsers, join, sendChat, setTyping } = useChatSocket();
   const [username, setUsername] = useState("");
@@ -17,7 +20,7 @@ function App() {
     event.preventDefault();
     const trimmed = username.trim();
     if (!trimmed) return;
-    join(trimmed);
+    join(trimmed, DEFAULT_ROOM);
     setHasJoined(true);
   }
 
@@ -73,6 +76,20 @@ function App() {
             </li>
           ))}
         </ul>
+
+        <div className="sidebar-section">
+          <div className="online-sidebar-header">
+            <h2>Salas disponíveis</h2>
+          </div>
+          <ul className="room-list">
+            {AVAILABLE_ROOMS.map((room) => (
+              <li key={room} className={`room-card ${room === DEFAULT_ROOM ? "current-room" : ""}`}>
+                <span>#{room}</span>
+                {room === DEFAULT_ROOM && <small>atual</small>}
+              </li>
+            ))}
+          </ul>
+        </div>
       </aside>
 
       <section className="chat-content">

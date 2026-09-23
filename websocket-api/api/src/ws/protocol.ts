@@ -12,6 +12,7 @@ import { z } from "zod";
 export const joinMessageSchema = z.object({
   type: z.literal("join"),
   username: z.string().trim().min(1, "Username is required").max(24, "Username is too long"),
+  room: z.string().trim().min(1, "Room is required").max(24, "Room name is too long").default("global"),
 });
 
 export const chatMessageSchema = z.object({

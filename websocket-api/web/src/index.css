@@ -119,6 +119,45 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.sidebar-section {
+  flex: none;
+  margin-top: 1.25rem;
+}
+
+.room-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.room-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  color: #4b5563;
+  font-size: 0.9rem;
+}
+
+.room-card.current-room {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.room-card small {
+  color: #6b7280;
+  font-size: 0.7rem;
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
 .online-dot {
   width: 8px;
   height: 8px;

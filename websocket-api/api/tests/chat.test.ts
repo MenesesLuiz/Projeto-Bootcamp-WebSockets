@@ -11,8 +11,8 @@ function connect(wsUrl: string, options?: WebSocket.ClientOptions): Promise<WebS
   });
 }
 
-function join(socket: WebSocket, username: string): void {
-  socket.send(JSON.stringify({ type: "join", username }));
+function join(socket: WebSocket, username: string, room = "global"): void {
+  socket.send(JSON.stringify({ type: "join", username, room }));
 }
 
 function say(socket: WebSocket, text: string): void {
@@ -39,11 +39,14 @@ describe("chat WebSocket", () => {
     await server.close();
   });
 
-  async function openClient(username: string): Promise<{ socket: WebSocket; events: MessageCollector }> {
+  async function openClient(
+    username: string,
+    room = "global",
+  ): Promise<{ socket: WebSocket; events: MessageCollector }> {
     const socket = await connect(server.wsUrl);
     sockets.push(socket);
     const events = new MessageCollector(socket);
-    join(socket, username);
+    join(socket, username, room);
     await events.waitFor((event) => event.type === "system" && event.text.includes(`${username} entrou`));
     return { socket, events };
   }
@@ -83,6 +86,25 @@ describe("chat WebSocket", () => {
     expect(received).toMatchObject({ type: "chat", username: "alice", text: "oi bob, tudo bem?" });
     expect(typeof received.id).toBe("string");
     expect(typeof received.createdAt).toBe("string");
+  });
+
+  it("keeps chat and agent events inside the sender's room", async () => {
+    const alice = await openClient("alice", "global");
+    const carol = await openClient("carol", "global");
+    const bob = await openClient("bob", "sala-2");
+
+    say(bob.socket, "mensagem privada da sala");
+    await expect(
+      alice.events.waitFor((event) => event.type === "chat" && event.username === "bob", 250),
+    ).rejects.toThrow();
+
+    say(bob.socket, "oi @agente");
+    await expect(alice.events.waitFor((event) => event.type === "agent_start", 250)).rejects.toThrow();
+    await bob.events.waitFor((event) => event.type === "agent_end", 5000);
+
+    say(alice.socket, "mensagem da global");
+    const received = await carol.events.waitFor((event) => event.type === "chat");
+    expect(received).toMatchObject({ username: "alice", text: "mensagem da global" });
   });
 
   it("relays typing status to everyone except the sender", async () => {

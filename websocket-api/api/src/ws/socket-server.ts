@@ -36,16 +36,16 @@ export function createChatServer(server: HttpServer): ChatServer {
   const registry = new ConnectionRegistry();
   const stopHeartbeat = startHeartbeat(wss);
 
-  function broadcastPresence(): void {
-    registry.broadcast({ type: "presence", usernames: registry.getUsernames() });
+  function broadcastPresence(room: string): void {
+    registry.broadcastToRoom(room, { type: "presence", usernames: registry.getUsernames(room) });
   }
 
   async function handleMessage(socket: WebSocket, message: ClientMessage): Promise<void> {
     if (message.type === "join") {
-      const client = registry.register(socket, message.username);
-      log.info("client joined", { username: client.username });
-      registry.broadcast({ type: "system", text: `${client.username} entrou no chat` });
-      broadcastPresence();
+      const client = registry.register(socket, message.username, message.room);
+      log.info("client joined", { username: client.username, room: client.room });
+      registry.broadcastToRoom(client.room, { type: "system", text: `${client.username} entrou no chat` });
+      broadcastPresence(client.room);
       return;
     }
 
@@ -56,14 +56,15 @@ export function createChatServer(server: HttpServer): ChatServer {
     }
 
     if (message.type === "typing") {
-      registry.broadcastExcept(
+      registry.broadcastToRoom(
+        client.room,
         { type: "typing", username: client.username, isTyping: message.isTyping },
         socket,
       );
       return;
     }
 
-    registry.broadcast({
+    registry.broadcastToRoom(client.room, {
       type: "chat",
       id: randomUUID(),
       username: client.username,
@@ -72,7 +73,7 @@ export function createChatServer(server: HttpServer): ChatServer {
     });
 
     if (mentionsAgent(message.text)) {
-      await streamAgentReply(registry, message.text);
+      await streamAgentReply(registry, client.room, message.text);
     }
   }
 
@@ -93,9 +94,9 @@ export function createChatServer(server: HttpServer): ChatServer {
     socket.on("close", () => {
       const client = registry.unregister(socket);
       if (client) {
-        log.info("client disconnected", { username: client.username });
-        registry.broadcast({ type: "system", text: `${client.username} saiu do chat` });
-        broadcastPresence();
+        log.info("client disconnected", { username: client.username, room: client.room });
+        registry.broadcastToRoom(client.room, { type: "system", text: `${client.username} saiu do chat` });
+        broadcastPresence(client.room);
       }
     });
   });
