@@ -2,6 +2,8 @@
 export type ServerEvent =
   | { type: "system"; text: string }
   | { type: "chat"; id: string; username: string; text: string; createdAt: string }
+  | { type: "presence"; usernames: string[] }
+  | { type: "typing"; username: string; isTyping: boolean }
   | { type: "agent_start"; id: string }
   | { type: "agent_chunk"; id: string; text: string }
   | { type: "agent_end"; id: string };

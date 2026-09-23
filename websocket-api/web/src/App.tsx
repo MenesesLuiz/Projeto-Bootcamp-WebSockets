@@ -3,7 +3,7 @@ import { useChatSocket } from "./useChatSocket";
 import type { Bubble, ConnectionStatus } from "./types";
 
 function App() {
-  const { status, bubbles, join, sendChat } = useChatSocket();
+  const { status, bubbles, onlineUsers, typingUsers, join, sendChat, setTyping } = useChatSocket();
   const [username, setUsername] = useState("");
   const [hasJoined, setHasJoined] = useState(false);
   const [draft, setDraft] = useState("");
@@ -26,7 +26,13 @@ function App() {
     const trimmed = draft.trim();
     if (!trimmed) return;
     sendChat(trimmed);
+    setTyping(false);
     setDraft("");
+  }
+
+  function handleDraftChange(value: string) {
+    setDraft(value);
+    setTyping(value.trim().length > 0);
   }
 
   if (!hasJoined) {
@@ -54,6 +60,22 @@ function App() {
 
   return (
     <main className="container chat-screen">
+      <aside className="online-sidebar" aria-label="Usuários online">
+        <div className="online-sidebar-header">
+          <h2>Online</h2>
+          <span>{onlineUsers.length}</span>
+        </div>
+        <ul className="online-user-list">
+          {onlineUsers.map((user, index) => (
+            <li key={`${user}-${index}`} className="online-user-card">
+              <span className="online-dot" aria-hidden="true" />
+              {user}
+            </li>
+          ))}
+        </ul>
+      </aside>
+
+      <section className="chat-content">
       <header className="chat-header">
         <h1>Realtime Chat</h1>
         <span className={`status status-${status}`}>{statusLabel(status)}</span>
@@ -84,6 +106,8 @@ function App() {
         ))}
       </ul>
 
+      {typingUsers.length > 0 && <p className="typing-indicator">{typingLabel(typingUsers)}</p>}
+
       <p className="mention-hint">
         Marque <strong>@agente</strong> na mensagem para receber uma resposta em streaming.
       </p>
@@ -93,7 +117,7 @@ function App() {
           type="text"
           placeholder="Escreva uma mensagem... (ex: @agente, tudo bem?)"
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => handleDraftChange(event.target.value)}
           maxLength={500}
           disabled={status !== "open"}
           autoFocus
@@ -102,6 +126,7 @@ function App() {
           Enviar
         </button>
       </form>
+      </section>
     </main>
   );
 }
@@ -110,6 +135,12 @@ function statusLabel(status: ConnectionStatus): string {
   if (status === "open") return "conectado";
   if (status === "connecting") return "conectando...";
   return "desconectado";
+}
+
+function typingLabel(usernames: string[]): string {
+  if (usernames.length === 1) return `${usernames[0]} está digitando...`;
+  if (usernames.length === 2) return `${usernames.join(" e ")} estão digitando...`;
+  return `${usernames[0]} e mais ${usernames.length - 1} estão digitando...`;
 }
 
 function bubbleClassName(bubble: Bubble): string {

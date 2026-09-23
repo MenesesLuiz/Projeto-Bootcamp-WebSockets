@@ -36,11 +36,21 @@ export class ConnectionRegistry {
     return this.clients.size;
   }
 
+  /** Returns one username per active connection; duplicate names are allowed. */
+  getUsernames(): string[] {
+    return Array.from(this.clients.values(), ({ username }) => username);
+  }
+
   /** Sends `event` to every connected client whose socket is still open. */
   broadcast(event: ServerEvent): void {
+    this.broadcastExcept(event);
+  }
+
+  /** Sends `event` to every connected client except `excludedSocket`. */
+  broadcastExcept(event: ServerEvent, excludedSocket?: WebSocket): void {
     const payload = JSON.stringify(event);
     for (const socket of this.clients.keys()) {
-      if (socket.readyState === socket.OPEN) {
+      if (socket !== excludedSocket && socket.readyState === socket.OPEN) {
         socket.send(payload);
       }
     }

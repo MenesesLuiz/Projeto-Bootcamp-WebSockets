@@ -56,10 +56,83 @@ h1 {
 
 /* ---- chat screen ---- */
 .chat-screen {
+  max-width: 960px;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 1rem;
+  padding-bottom: 1.25rem;
+}
+
+.online-sidebar {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: 420px;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.online-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.online-sidebar-header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.online-sidebar-header span {
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.online-user-list {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+}
+
+.online-user-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.online-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+.chat-content {
+  min-width: 0;
+  min-height: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding-bottom: 1.25rem;
 }
 
 .chat-header {
@@ -180,6 +253,14 @@ h1 {
   color: #9ca3af;
 }
 
+.typing-indicator {
+  flex: none;
+  margin: 0.5rem 0 0;
+  color: #6b7280;
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
 .mention-hint strong {
   color: #047857;
 }
@@ -220,4 +301,22 @@ h1 {
 .message-form button:disabled {
   background: #9ca3af;
   cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .chat-screen {
+    height: auto;
+    min-height: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .online-sidebar {
+    height: auto;
+    max-height: 180px;
+  }
+
+  .online-user-list {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
 }

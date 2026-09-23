@@ -36,17 +36,30 @@ export function createChatServer(server: HttpServer): ChatServer {
   const registry = new ConnectionRegistry();
   const stopHeartbeat = startHeartbeat(wss);
 
+  function broadcastPresence(): void {
+    registry.broadcast({ type: "presence", usernames: registry.getUsernames() });
+  }
+
   async function handleMessage(socket: WebSocket, message: ClientMessage): Promise<void> {
     if (message.type === "join") {
       const client = registry.register(socket, message.username);
       log.info("client joined", { username: client.username });
       registry.broadcast({ type: "system", text: `${client.username} entrou no chat` });
+      broadcastPresence();
       return;
     }
 
     const client = registry.get(socket);
     if (!client) {
       log.warn("chat message received before join, ignoring");
+      return;
+    }
+
+    if (message.type === "typing") {
+      registry.broadcastExcept(
+        { type: "typing", username: client.username, isTyping: message.isTyping },
+        socket,
+      );
       return;
     }
 
@@ -82,6 +95,7 @@ export function createChatServer(server: HttpServer): ChatServer {
       if (client) {
         log.info("client disconnected", { username: client.username });
         registry.broadcast({ type: "system", text: `${client.username} saiu do chat` });
+        broadcastPresence();
       }
     });
   });

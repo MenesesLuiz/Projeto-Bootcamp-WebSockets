@@ -19,7 +19,16 @@ export const chatMessageSchema = z.object({
   text: z.string().trim().min(1, "Message text is required").max(500, "Message is too long"),
 });
 
-export const clientMessageSchema = z.discriminatedUnion("type", [joinMessageSchema, chatMessageSchema]);
+export const typingMessageSchema = z.object({
+  type: z.literal("typing"),
+  isTyping: z.boolean(),
+});
+
+export const clientMessageSchema = z.discriminatedUnion("type", [
+  joinMessageSchema,
+  chatMessageSchema,
+  typingMessageSchema,
+]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 
@@ -59,6 +68,17 @@ export type ChatEvent = {
   createdAt: string;
 };
 
+export type TypingEvent = {
+  type: "typing";
+  username: string;
+  isTyping: boolean;
+};
+
+export type PresenceEvent = {
+  type: "presence";
+  usernames: string[];
+};
+
 /**
  * The agent's reply streams as three events - start, one or more chunks,
  * end - the same shape real LLM streaming APIs use (e.g. a message start,
@@ -69,4 +89,11 @@ export type AgentStartEvent = { type: "agent_start"; id: string };
 export type AgentChunkEvent = { type: "agent_chunk"; id: string; text: string };
 export type AgentEndEvent = { type: "agent_end"; id: string };
 
-export type ServerEvent = SystemEvent | ChatEvent | AgentStartEvent | AgentChunkEvent | AgentEndEvent;
+export type ServerEvent =
+  | SystemEvent
+  | ChatEvent
+  | PresenceEvent
+  | TypingEvent
+  | AgentStartEvent
+  | AgentChunkEvent
+  | AgentEndEvent;

@@ -19,6 +19,10 @@ function say(socket: WebSocket, text: string): void {
   socket.send(JSON.stringify({ type: "chat", text }));
 }
 
+function setTyping(socket: WebSocket, isTyping: boolean): void {
+  socket.send(JSON.stringify({ type: "typing", isTyping }));
+}
+
 describe("chat WebSocket", () => {
   let server: TestServer;
   let sockets: WebSocket[];
@@ -52,6 +56,23 @@ describe("chat WebSocket", () => {
     expect(event).toEqual({ type: "system", text: "alice entrou no chat" });
   });
 
+  it("broadcasts the online users when someone joins or leaves", async () => {
+    const bob = await openClient("bob");
+    await bob.events.waitFor((event) => event.type === "presence" && event.usernames.join() === "bob");
+
+    const alice = await openClient("alice");
+    const joined = await bob.events.waitFor(
+      (event) => event.type === "presence" && event.usernames.join() === "bob,alice",
+    );
+    expect(joined).toEqual({ type: "presence", usernames: ["bob", "alice"] });
+
+    alice.socket.close();
+    const left = await bob.events.waitFor(
+      (event) => event.type === "presence" && event.usernames.join() === "bob",
+    );
+    expect(left).toEqual({ type: "presence", usernames: ["bob"] });
+  });
+
   it("broadcasts a chat message to every connected client", async () => {
     const alice = await openClient("alice");
     const bob = await openClient("bob");
@@ -62,6 +83,21 @@ describe("chat WebSocket", () => {
     expect(received).toMatchObject({ type: "chat", username: "alice", text: "oi bob, tudo bem?" });
     expect(typeof received.id).toBe("string");
     expect(typeof received.createdAt).toBe("string");
+  });
+
+  it("relays typing status to everyone except the sender", async () => {
+    const alice = await openClient("alice");
+    const bob = await openClient("bob");
+
+    setTyping(alice.socket, true);
+    await expect(alice.events.waitFor((event) => event.type === "typing", 250)).rejects.toThrow();
+
+    const started = await bob.events.waitFor((event) => event.type === "typing");
+    expect(started).toEqual({ type: "typing", username: "alice", isTyping: true });
+
+    setTyping(alice.socket, false);
+    const stopped = await bob.events.waitFor((event) => event.type === "typing" && !event.isTyping);
+    expect(stopped).toEqual({ type: "typing", username: "alice", isTyping: false });
   });
 
   it("ignores a chat message sent before joining", async () => {

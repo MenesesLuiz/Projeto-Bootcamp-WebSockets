@@ -8,6 +8,8 @@ import type { Bubble, ConnectionStatus, ServerEvent } from "./types";
 const WS_URL = import.meta.env.DEV
   ? "ws://localhost:3000/ws"
   : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
+const TYPING_STOP_DELAY_MS = 800;
+const REMOTE_TYPING_TIMEOUT_MS = 2000;
 
 // `crypto.randomUUID()` only exists in secure contexts (HTTPS, or
 // localhost) - the deployed demo is plain HTTP on a non-localhost host on
@@ -26,8 +28,13 @@ function randomId(): string {
 export function useChatSocket() {
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const socketRef = useRef<WebSocket | null>(null);
   const usernameRef = useRef("");
+  const typingActiveRef = useRef(false);
+  const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remoteTypingTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   useEffect(() => {
     const socket = new WebSocket(WS_URL);
@@ -39,6 +46,32 @@ export function useChatSocket() {
 
     socket.addEventListener("message", (event) => {
       const serverEvent = JSON.parse(event.data as string) as ServerEvent;
+
+      if (serverEvent.type === "presence") {
+        setOnlineUsers(serverEvent.usernames);
+        return;
+      }
+
+      if (serverEvent.type === "typing") {
+        const previousTimer = remoteTypingTimersRef.current.get(serverEvent.username);
+        if (previousTimer) clearTimeout(previousTimer);
+
+        if (serverEvent.isTyping) {
+          setTypingUsers((current) =>
+            current.includes(serverEvent.username) ? current : [...current, serverEvent.username],
+          );
+
+          const timer = setTimeout(() => {
+            setTypingUsers((current) => current.filter((username) => username !== serverEvent.username));
+            remoteTypingTimersRef.current.delete(serverEvent.username);
+          }, REMOTE_TYPING_TIMEOUT_MS);
+          remoteTypingTimersRef.current.set(serverEvent.username, timer);
+        } else {
+          setTypingUsers((current) => current.filter((username) => username !== serverEvent.username));
+          remoteTypingTimersRef.current.delete(serverEvent.username);
+        }
+        return;
+      }
 
       setBubbles((current) => {
         switch (serverEvent.type) {
@@ -81,7 +114,12 @@ export function useChatSocket() {
     // Runs twice in dev under StrictMode (mount -> cleanup -> mount): the
     // first socket opens and is immediately closed, which is expected and
     // harmless here since `join` is only ever called from a user action.
-    return () => socket.close();
+    return () => {
+      socket.close();
+      if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+      for (const timer of remoteTypingTimersRef.current.values()) clearTimeout(timer);
+      remoteTypingTimersRef.current.clear();
+    };
   }, []);
 
   const join = useCallback((username: string) => {
@@ -93,5 +131,35 @@ export function useChatSocket() {
     socketRef.current?.send(JSON.stringify({ type: "chat", text }));
   }, []);
 
-  return { status, bubbles, join, sendChat };
+  const setTyping = useCallback((isTyping: boolean) => {
+    if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+
+    const sendTyping = (value: boolean) => {
+      const socket = socketRef.current;
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: "typing", isTyping: value }));
+      }
+    };
+
+    if (!isTyping) {
+      if (typingActiveRef.current) {
+        typingActiveRef.current = false;
+        sendTyping(false);
+      }
+      return;
+    }
+
+    if (!typingActiveRef.current) {
+      typingActiveRef.current = true;
+      sendTyping(true);
+    }
+
+    typingStopTimerRef.current = setTimeout(() => {
+      typingActiveRef.current = false;
+      sendTyping(false);
+      typingStopTimerRef.current = null;
+    }, TYPING_STOP_DELAY_MS);
+  }, []);
+
+  return { status, bubbles, onlineUsers, typingUsers, join, sendChat, setTyping };
 }
