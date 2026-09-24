@@ -223,6 +223,7 @@ function App() {
 
 function statusLabel(status: ConnectionStatus): string {
   if (status === "open") return "conectado";
+  if (status === "reconnecting") return "reconectando...";
   if (status === "connecting") return "conectando...";
   return "desconectado";
 }

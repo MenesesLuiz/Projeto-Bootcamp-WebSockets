@@ -18,4 +18,4 @@ export type Bubble =
   | { kind: "chat"; id: string; username: string; text: string; mine: boolean }
   | { kind: "agent"; id: string; text: string; done: boolean };
 
-export type ConnectionStatus = "connecting" | "open" | "closed";
+export type ConnectionStatus = "connecting" | "reconnecting" | "open" | "closed";

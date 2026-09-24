@@ -10,6 +10,8 @@ const WS_URL = import.meta.env.DEV
   : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
 const TYPING_STOP_DELAY_MS = 800;
 const REMOTE_TYPING_TIMEOUT_MS = 2000;
+const INITIAL_RECONNECT_DELAY_MS = 1000;
+const MAX_RECONNECT_DELAY_MS = 8000;
 
 // `crypto.randomUUID()` only exists in secure contexts (HTTPS, or
 // localhost) - the deployed demo is plain HTTP on a non-localhost host on
@@ -35,22 +37,58 @@ export function useChatSocket() {
   const [roomError, setRoomError] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
   const usernameRef = useRef("");
+  const roomRef = useRef("global");
   const typingActiveRef = useRef(false);
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remoteTypingTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   useEffect(() => {
-    const socket = new WebSocket(WS_URL);
-    socketRef.current = socket;
+    let disposed = false;
+    let reconnectAttempt = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-    socket.addEventListener("open", () => setStatus("open"));
-    socket.addEventListener("close", () => setStatus("closed"));
-    socket.addEventListener("error", () => setStatus("closed"));
+    function scheduleReconnect(): void {
+      if (disposed || reconnectTimer) return;
 
-    socket.addEventListener("message", (event) => {
+      const delay = Math.min(
+        INITIAL_RECONNECT_DELAY_MS * 2 ** reconnectAttempt,
+        MAX_RECONNECT_DELAY_MS,
+      );
+      reconnectAttempt += 1;
+      setStatus("reconnecting");
+
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connect();
+      }, delay);
+    }
+
+    function connect(): void {
+      const socket = new WebSocket(WS_URL);
+      socketRef.current = socket;
+
+      socket.addEventListener("open", () => {
+        reconnectAttempt = 0;
+        setStatus("open");
+      });
+
+      socket.addEventListener("close", () => {
+        if (socketRef.current === socket) socketRef.current = null;
+        scheduleReconnect();
+      });
+
+      socket.addEventListener("error", () => {
+        if (!disposed) setStatus("reconnecting");
+      });
+
+      socket.addEventListener("message", handleMessage);
+    }
+
+    function handleMessage(event: MessageEvent): void {
       const serverEvent = JSON.parse(event.data as string) as ServerEvent;
 
       if (serverEvent.type === "room_changed") {
+        roomRef.current = serverEvent.room;
         setCurrentRoom(serverEvent.room);
         setBubbles([]);
         setOnlineUsers([]);
@@ -59,6 +97,7 @@ export function useChatSocket() {
       }
 
       if (serverEvent.type === "room_renamed") {
+        if (roomRef.current === serverEvent.oldName) roomRef.current = serverEvent.newName;
         setCurrentRoom((current) => (current === serverEvent.oldName ? serverEvent.newName : current));
         setAvailableRooms((current) =>
           current.map((room) => (room === serverEvent.oldName ? serverEvent.newName : room)),
@@ -139,13 +178,18 @@ export function useChatSocket() {
             );
         }
       });
-    });
+    }
+
+    connect();
 
     // Runs twice in dev under StrictMode (mount -> cleanup -> mount): the
     // first socket opens and is immediately closed, which is expected and
-    // harmless here since `join` is only ever called from a user action.
+    // harmless here because cleanup cancels its reconnection timer.
     return () => {
-      socket.close();
+      disposed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      socketRef.current?.close();
+      socketRef.current = null;
       if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
       for (const timer of remoteTypingTimersRef.current.values()) clearTimeout(timer);
       remoteTypingTimersRef.current.clear();
@@ -154,6 +198,7 @@ export function useChatSocket() {
 
   const join = useCallback((username: string, room = "global") => {
     usernameRef.current = username;
+    roomRef.current = room;
     setCurrentRoom(room);
     socketRef.current?.send(JSON.stringify({ type: "join", username, room }));
   }, []);
