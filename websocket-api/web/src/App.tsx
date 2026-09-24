@@ -81,7 +81,9 @@ function App() {
         <h1>Realtime Chat</h1>
         <p className="hint">Workshop de streaming &amp; WebSockets - tudo rodando em localhost</p>
         <form onSubmit={handleJoin} className="join-form">
+          <label htmlFor="username">Nome</label>
           <input
+            id="username"
             type="text"
             placeholder="Seu nome"
             value={username}
@@ -203,14 +205,15 @@ function App() {
       </p>
 
       <form onSubmit={handleSend} className="message-form">
+        <label htmlFor="message">Mensagem</label>
         <input
+          id="message"
           type="text"
           placeholder="Escreva uma mensagem... (ex: @agente, tudo bem?)"
           value={draft}
           onChange={(event) => handleDraftChange(event.target.value)}
           maxLength={500}
           disabled={status !== "open"}
-          autoFocus
         />
         <button type="submit" disabled={status !== "open" || !draft.trim()}>
           Enviar

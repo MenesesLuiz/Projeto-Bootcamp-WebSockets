@@ -379,6 +379,14 @@ h1 {
   font-size: 1rem;
 }
 
+.join-form label,
+.message-form label {
+  flex: none;
+  color: #4b5563;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .join-form button,
 .message-form button {
   padding: 0.6rem 1rem;
