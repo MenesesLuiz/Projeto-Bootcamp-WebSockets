@@ -35,9 +35,11 @@ export function useChatSocket() {
   const [currentRoom, setCurrentRoom] = useState("global");
   const [availableRooms, setAvailableRooms] = useState<string[]>([]);
   const [roomError, setRoomError] = useState("");
+  const [joined, setJoined] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
   const usernameRef = useRef("");
   const roomRef = useRef("global");
+  const joinPendingRef = useRef(false);
   const typingActiveRef = useRef(false);
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remoteTypingTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -72,6 +74,7 @@ export function useChatSocket() {
         setStatus("open");
 
         if (usernameRef.current) {
+          joinPendingRef.current = true;
           socket.send(
             JSON.stringify({
               type: "join",
@@ -108,6 +111,14 @@ export function useChatSocket() {
     function handleMessage(event: MessageEvent): void {
       const serverEvent = JSON.parse(event.data as string) as ServerEvent;
 
+      if (serverEvent.type === "joined") {
+        joinPendingRef.current = false;
+        roomRef.current = serverEvent.room;
+        setJoined(true);
+        setCurrentRoom(serverEvent.room);
+        return;
+      }
+
       if (serverEvent.type === "room_changed") {
         roomRef.current = serverEvent.room;
         setCurrentRoom(serverEvent.room);
@@ -134,6 +145,10 @@ export function useChatSocket() {
 
       if (serverEvent.type === "error") {
         setRoomError(serverEvent.message);
+        if (joinPendingRef.current) {
+          joinPendingRef.current = false;
+          setJoined(false);
+        }
         return;
       }
 
@@ -220,6 +235,9 @@ export function useChatSocket() {
   const join = useCallback((username: string, room = "global") => {
     usernameRef.current = username;
     roomRef.current = room;
+    joinPendingRef.current = true;
+    setRoomError("");
+    setJoined(false);
     setCurrentRoom(room);
     socketRef.current?.send(JSON.stringify({ type: "join", username, room }));
   }, []);
@@ -274,6 +292,7 @@ export function useChatSocket() {
 
   return {
     status,
+    joined,
     bubbles,
     onlineUsers,
     typingUsers,

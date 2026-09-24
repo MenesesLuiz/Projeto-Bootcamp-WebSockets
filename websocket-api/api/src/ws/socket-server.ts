@@ -50,12 +50,24 @@ export function createChatServer(server: HttpServer): ChatServer {
 
   async function handleMessage(socket: WebSocket, message: ClientMessage): Promise<void> {
     if (message.type === "join") {
+      if (registry.get(socket)) {
+        sendEvent(socket, { type: "error", message: "Esta conexão já entrou no chat" });
+        return;
+      }
+
       if (!registry.hasRoom(message.room)) {
         sendEvent(socket, { type: "error", message: `Sala inexistente: ${message.room}` });
         return;
       }
+
+      if (registry.hasUsername(message.username)) {
+        sendEvent(socket, { type: "error", message: `Nome já está em uso: ${message.username}` });
+        return;
+      }
+
       const client = registry.register(socket, message.username, message.room);
       log.info("client joined", { username: client.username, room: client.room });
+      sendEvent(socket, { type: "joined", username: client.username, room: client.room });
       registry.broadcastToRoom(client.room, { type: "system", text: `${client.username} entrou no chat` });
       broadcastPresence(client.room);
       return;

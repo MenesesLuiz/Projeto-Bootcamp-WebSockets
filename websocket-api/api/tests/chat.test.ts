@@ -88,6 +88,27 @@ describe("chat WebSocket", () => {
     expect(left).toEqual({ type: "presence", usernames: ["bob"] });
   });
 
+  it("rejects duplicate usernames without considering case and frees the name after disconnect", async () => {
+    const alice = await openClient("Alice");
+    const duplicateSocket = await connect(server.wsUrl);
+    sockets.push(duplicateSocket);
+    const duplicateEvents = new MessageCollector(duplicateSocket);
+
+    join(duplicateSocket, "alice");
+
+    await expect(duplicateEvents.waitFor((event) => event.type === "error")).resolves.toEqual({
+      type: "error",
+      message: "Nome já está em uso: alice",
+    });
+    expect(duplicateEvents.all().some((event) => event.type === "joined")).toBe(false);
+
+    const observer = await openClient("observer");
+    alice.socket.close();
+    await observer.events.waitFor((event) => event.type === "system" && event.text === "Alice saiu do chat");
+
+    await openClient("alice");
+  });
+
   it("broadcasts a chat message to every connected client", async () => {
     const alice = await openClient("alice");
     const bob = await openClient("bob");

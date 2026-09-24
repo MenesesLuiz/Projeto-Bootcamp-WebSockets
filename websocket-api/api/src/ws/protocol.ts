@@ -105,6 +105,12 @@ export type RoomsEvent = {
   rooms: string[];
 };
 
+export type JoinedEvent = {
+  type: "joined";
+  username: string;
+  room: string;
+};
+
 export type ErrorEvent = {
   type: "error";
   message: string;
@@ -136,6 +142,7 @@ export type ServerEvent =
   | ChatEvent
   | PresenceEvent
   | RoomsEvent
+  | JoinedEvent
   | ErrorEvent
   | RoomChangedEvent
   | RoomRenamedEvent

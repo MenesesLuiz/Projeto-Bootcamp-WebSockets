@@ -75,6 +75,7 @@ do jeito que qualquer bot de chat com "mention" costuma funcionar (ex.: `@bot` n
 | `chat`          | `{ type: "chat", id, username, text, createdAt }`       | Mensagem de um usuário, para todo mundo (inclusive quem enviou) |
 | `presence`      | `{ type: "presence", usernames }`                      | Lista atual de conexões online                      |
 | `rooms`         | `{ type: "rooms", rooms }`                             | Catálogo atual de salas                             |
+| `joined`        | `{ type: "joined", username, room }`                 | Confirma que o login foi aceito                    |
 | `error`         | `{ type: "error", message }`                           | Rejeição de uma ação                               |
 | `room_changed`  | `{ type: "room_changed", room }`                       | Confirma a troca de sala                           |
 | `room_renamed`  | `{ type: "room_renamed", oldName, newName }`           | Informa a mudança do nome de uma sala              |

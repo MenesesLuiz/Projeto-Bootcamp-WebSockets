@@ -33,6 +33,11 @@ export class ConnectionRegistry {
     return this.clients.get(socket);
   }
 
+  hasUsername(username: string): boolean {
+    const key = this.usernameKey(username);
+    return [...this.clients.values()].some((client) => this.usernameKey(client.username) === key);
+  }
+
   moveToRoom(socket: WebSocket, room: string): ChatClient | undefined {
     const client = this.clients.get(socket);
     if (client) client.room = room;
@@ -113,5 +118,9 @@ export class ConnectionRegistry {
 
   private roomKey(room: string): string {
     return room.toLocaleLowerCase();
+  }
+
+  private usernameKey(username: string): string {
+    return username.trim().toLocaleLowerCase();
   }
 }

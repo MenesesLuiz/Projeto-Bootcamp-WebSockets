@@ -7,6 +7,7 @@ const DEFAULT_ROOM = "global";
 function App() {
   const {
     status,
+    joined,
     bubbles,
     onlineUsers,
     typingUsers,
@@ -21,7 +22,6 @@ function App() {
     setTyping,
   } = useChatSocket();
   const [username, setUsername] = useState("");
-  const [hasJoined, setHasJoined] = useState(false);
   const [draft, setDraft] = useState("");
   const [newRoomName, setNewRoomName] = useState("");
   const [renameRoomName, setRenameRoomName] = useState("");
@@ -36,7 +36,6 @@ function App() {
     const trimmed = username.trim();
     if (!trimmed) return;
     join(trimmed, DEFAULT_ROOM);
-    setHasJoined(true);
   }
 
   function handleSend(event: FormEvent) {
@@ -75,7 +74,7 @@ function App() {
     setRenameRoomName("");
   }
 
-  if (!hasJoined) {
+  if (!joined) {
     return (
       <main className="container join-screen">
         <h1>Realtime Chat</h1>
@@ -96,6 +95,7 @@ function App() {
             {status === "open" ? "Entrar no chat" : "Conectando..."}
           </button>
         </form>
+        {roomError && <p className="room-error">{roomError}</p>}
       </main>
     );
   }
