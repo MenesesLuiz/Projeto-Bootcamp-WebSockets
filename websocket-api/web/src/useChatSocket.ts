@@ -70,10 +70,31 @@ export function useChatSocket() {
       socket.addEventListener("open", () => {
         reconnectAttempt = 0;
         setStatus("open");
+
+        if (usernameRef.current) {
+          socket.send(
+            JSON.stringify({
+              type: "join",
+              username: usernameRef.current,
+              room: roomRef.current,
+            }),
+          );
+        }
       });
 
       socket.addEventListener("close", () => {
         if (socketRef.current === socket) socketRef.current = null;
+        if (disposed) return;
+        setBubbles([]);
+        setOnlineUsers([]);
+        setTypingUsers([]);
+        typingActiveRef.current = false;
+        if (typingStopTimerRef.current) {
+          clearTimeout(typingStopTimerRef.current);
+          typingStopTimerRef.current = null;
+        }
+        for (const timer of remoteTypingTimersRef.current.values()) clearTimeout(timer);
+        remoteTypingTimersRef.current.clear();
         scheduleReconnect();
       });
 
