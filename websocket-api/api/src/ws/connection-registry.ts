@@ -2,6 +2,30 @@ import { randomUUID } from "crypto";
 import type { WebSocket } from "ws";
 import type { ServerEvent } from "./protocol";
 
+export const MAX_BUFFERED_BYTES = 256 * 1024;
+
+function sendPayload(socket: WebSocket, payload: string): boolean {
+  if (socket.readyState !== socket.OPEN) return false;
+
+  if (socket.bufferedAmount > MAX_BUFFERED_BYTES) {
+    socket.close(1013, "Backpressure limit exceeded");
+    return false;
+  }
+
+  socket.send(payload);
+
+  if (socket.bufferedAmount > MAX_BUFFERED_BYTES) {
+    socket.close(1013, "Backpressure limit exceeded");
+    return false;
+  }
+
+  return true;
+}
+
+export function sendEvent(socket: WebSocket, event: ServerEvent): boolean {
+  return sendPayload(socket, JSON.stringify(event));
+}
+
 export type ChatClient = {
   id: string;
   username: string;
@@ -120,7 +144,7 @@ export class ConnectionRegistry {
     const payload = JSON.stringify(event);
     for (const [socket, client] of this.clients) {
       if (client.room === room && socket !== excludedSocket && socket.readyState === socket.OPEN) {
-        socket.send(payload);
+        sendPayload(socket, payload);
       }
     }
   }
@@ -129,7 +153,7 @@ export class ConnectionRegistry {
   broadcastToAll(event: ServerEvent): void {
     const payload = JSON.stringify(event);
     for (const socket of this.clients.keys()) {
-      if (socket.readyState === socket.OPEN) socket.send(payload);
+      sendPayload(socket, payload);
     }
   }
 

@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import type { IncomingMessage, Server as HttpServer } from "http";
 import { WebSocketServer, type WebSocket } from "ws";
-import { ConnectionRegistry } from "./connection-registry";
+import { ConnectionRegistry, sendEvent } from "./connection-registry";
 import { mentionsAgent, streamAgentReply } from "./agent";
 import { startHeartbeat } from "./heartbeat";
 import { parseClientMessage, type ClientMessage } from "./protocol";
@@ -36,10 +36,6 @@ function consumeRateLimit<T>(buckets: Map<T, RateBucket>, key: T): boolean {
   if (bucket.count >= MAX_MESSAGES_PER_WINDOW) return false;
   bucket.count += 1;
   return true;
-}
-
-function sendEvent(socket: WebSocket, event: import("./protocol").ServerEvent): void {
-  if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(event));
 }
 
 export type ChatServer = {

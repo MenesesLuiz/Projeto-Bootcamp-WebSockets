@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import { startTestServer, type TestServer } from "./helpers/test-server";
 import { MessageCollector } from "./helpers/message-collector";
+import { MAX_BUFFERED_BYTES, sendEvent } from "../src/ws/connection-registry";
 import type { AgentChunkEvent, ChatEvent } from "../src/ws/protocol";
 
 function connect(wsUrl: string, options?: WebSocket.ClientOptions): Promise<WebSocket> {
@@ -440,5 +441,19 @@ describe("chat WebSocket", () => {
     }
 
     await expect(rejectedConnection(server.wsUrl)).resolves.toBe(429);
+  });
+
+  it("closes a slow client instead of queuing more data", () => {
+    const socket = {
+      OPEN: 1,
+      readyState: 1,
+      bufferedAmount: MAX_BUFFERED_BYTES + 1,
+      close: jest.fn(),
+      send: jest.fn(),
+    } as unknown as WebSocket;
+
+    expect(sendEvent(socket, { type: "system", text: "hello" })).toBe(false);
+    expect(socket.close).toHaveBeenCalledWith(1013, "Backpressure limit exceeded");
+    expect(socket.send).not.toHaveBeenCalled();
   });
 });
