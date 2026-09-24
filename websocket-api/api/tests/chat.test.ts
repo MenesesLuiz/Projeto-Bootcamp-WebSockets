@@ -31,6 +31,21 @@ function createRoom(socket: WebSocket, name: string): void {
   socket.send(JSON.stringify({ type: "create_room", name }));
 }
 
+function waitForClose(socket: WebSocket): Promise<number> {
+  return new Promise((resolve) => {
+    socket.once("close", (code) => resolve(code));
+  });
+}
+
+function rejectedConnection(wsUrl: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(wsUrl);
+    socket.once("unexpected-response", (_request, response) => resolve(response.statusCode || 0));
+    socket.once("error", () => undefined);
+    socket.once("open", () => reject(new Error("connection should have been rejected")));
+  });
+}
+
 function renameRoom(socket: WebSocket, name: string): void {
   socket.send(JSON.stringify({ type: "rename_room", name }));
 }
@@ -396,5 +411,34 @@ describe("chat WebSocket", () => {
     });
 
     expect(statusCode).toBe(403);
+  });
+
+  it("closes frames larger than the WebSocket payload limit", async () => {
+    const socket = await connect(server.wsUrl);
+    sockets.push(socket);
+    const closed = waitForClose(socket);
+
+    socket.send(Buffer.alloc(9 * 1024));
+
+    await expect(closed).resolves.toBe(1009);
+  });
+
+  it("closes a client that exceeds the message rate limit", async () => {
+    const alice = await openClient("alice");
+    const closed = waitForClose(alice.socket);
+
+    for (let index = 0; index < 30; index += 1) {
+      say(alice.socket, `message-${index}`);
+    }
+
+    await expect(closed).resolves.toBe(1008);
+  });
+
+  it("rejects connections above the per-IP limit", async () => {
+    for (let index = 0; index < 10; index += 1) {
+      sockets.push(await connect(server.wsUrl));
+    }
+
+    await expect(rejectedConnection(server.wsUrl)).resolves.toBe(429);
   });
 });

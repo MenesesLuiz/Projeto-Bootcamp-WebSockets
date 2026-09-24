@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { Server as HttpServer } from "http";
+import type { IncomingMessage, Server as HttpServer } from "http";
 import { WebSocketServer, type WebSocket } from "ws";
 import { ConnectionRegistry } from "./connection-registry";
 import { mentionsAgent, streamAgentReply } from "./agent";
@@ -9,6 +9,34 @@ import { logger } from "../utils/logger";
 
 const log = logger.child("ws");
 const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173";
+const MAX_FRAME_BYTES = 8 * 1024;
+const MAX_CONNECTIONS = 100;
+const MAX_CONNECTIONS_PER_IP = 10;
+const RATE_LIMIT_WINDOW_MS = 10_000;
+const MAX_MESSAGES_PER_WINDOW = 30;
+
+type RateBucket = {
+  startedAt: number;
+  count: number;
+};
+
+function getClientIp(request: IncomingMessage): string {
+  return request.socket.remoteAddress || "unknown";
+}
+
+function consumeRateLimit<T>(buckets: Map<T, RateBucket>, key: T): boolean {
+  const now = Date.now();
+  const bucket = buckets.get(key);
+
+  if (!bucket || now - bucket.startedAt >= RATE_LIMIT_WINDOW_MS) {
+    buckets.set(key, { startedAt: now, count: 1 });
+    return true;
+  }
+
+  if (bucket.count >= MAX_MESSAGES_PER_WINDOW) return false;
+  bucket.count += 1;
+  return true;
+}
 
 function sendEvent(socket: WebSocket, event: import("./protocol").ServerEvent): void {
   if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(event));
@@ -22,16 +50,36 @@ export type ChatServer = {
 
 /** Wires the chat WebSocket server on top of an existing HTTP server, at `/ws`. */
 export function createChatServer(server: HttpServer): ChatServer {
+  const connectionsByIp = new Map<string, number>();
+  const messageBucketsBySocket = new Map<WebSocket, RateBucket>();
+  const messageBucketsByIp = new Map<string, RateBucket>();
+
   const wss = new WebSocketServer({
     server,
     path: "/ws",
-    verifyClient: ({ origin }, callback) => {
+    maxPayload: MAX_FRAME_BYTES,
+    verifyClient: (info, callback) => {
       // Browsers don't block cross-origin WebSocket connections on their own
       // (unlike fetch/XHR, which CORS covers) - the server has to check the
       // Origin header itself if it wants to reject unexpected callers.
-      const allowed = !origin || origin === ALLOWED_ORIGIN;
+      const ip = getClientIp(info.req);
+      const connectionsFromIp = connectionsByIp.get(ip) || 0;
+
+      if (wss.clients.size >= MAX_CONNECTIONS) {
+        log.warn("rejected connection limit", { totalClients: wss.clients.size });
+        callback(false, 503, "Too many connections");
+        return;
+      }
+
+      if (connectionsFromIp >= MAX_CONNECTIONS_PER_IP) {
+        log.warn("rejected per-ip connection limit", { ip });
+        callback(false, 429, "Too many connections from this IP");
+        return;
+      }
+
+      const allowed = !info.origin || info.origin === ALLOWED_ORIGIN;
       if (!allowed) {
-        log.warn("rejected connection from disallowed origin", { origin });
+        log.warn("rejected connection from disallowed origin", { origin: info.origin });
       }
       callback(allowed, 403, "Forbidden");
     },
@@ -201,11 +249,26 @@ export function createChatServer(server: HttpServer): ChatServer {
     }
   }
 
-  wss.on("connection", (socket: WebSocket) => {
+  wss.on("connection", (socket: WebSocket, request: IncomingMessage) => {
+    const ip = getClientIp(request);
+    connectionsByIp.set(ip, (connectionsByIp.get(ip) || 0) + 1);
     log.info("client connected", { totalClients: wss.clients.size });
     sendEvent(socket, { type: "rooms", rooms: registry.getRooms() });
 
+    socket.on("error", (error) => {
+      log.warn("socket error", { message: error.message });
+    });
+
     socket.on("message", (raw) => {
+      if (
+        !consumeRateLimit(messageBucketsBySocket, socket) ||
+        !consumeRateLimit(messageBucketsByIp, ip)
+      ) {
+        sendEvent(socket, { type: "error", message: "Limite de mensagens excedido" });
+        socket.close(1008, "Rate limit exceeded");
+        return;
+      }
+
       const parsed = parseClientMessage(raw.toString());
 
       if (!parsed.success) {
@@ -217,6 +280,15 @@ export function createChatServer(server: HttpServer): ChatServer {
     });
 
     socket.on("close", () => {
+      messageBucketsBySocket.delete(socket);
+      const remainingConnections = (connectionsByIp.get(ip) || 1) - 1;
+      if (remainingConnections <= 0) {
+        connectionsByIp.delete(ip);
+        messageBucketsByIp.delete(ip);
+      } else {
+        connectionsByIp.set(ip, remainingConnections);
+      }
+
       const client = registry.unregister(socket);
       if (client) {
         log.info("client disconnected", { username: client.username, room: client.room });
