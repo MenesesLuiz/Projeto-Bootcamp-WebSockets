@@ -1,19 +1,27 @@
 # Realtime Chat
 
-Projeto de referência para o workshop de streaming & WebSockets, na sequência do
-[workshop 3 — APIs REST](../03-rest-api/README.md). Um chat em tempo real (Node + `ws` +
-TypeScript) com um "agente" que responde em streaming - a resposta chega em pedaços, palavra
-por palavra, do mesmo jeito que uma API de LLM transmite o que gera - e um frontend mínimo
-(React + Vite) pra ver isso acontecendo em mais de uma aba ao mesmo tempo.
+Projeto de estudo de um chat em tempo real usando WebSocket. A aplicação é dividida em uma API Node.js/TypeScript e um frontend React/Vite.
 
-Veja o [planejamento do workshop](./docs/planejamento.md) para o cronograma e o roteiro da aula.
+O projeto atualmente demonstra:
+
+- presença de usuários conectados;
+- indicador de digitação com debounce no cliente;
+- salas públicas, incluindo criação, troca, renomeação e exclusão;
+- broadcasts limitados à sala atual;
+- respostas simuladas do `@agente` com streaming;
+- reconexão automática do cliente;
+- limites básicos contra excesso de conexões, mensagens e backpressure.
+
+O planejamento didático está em [`docs/planejamento.md`](docs/planejamento.md), e os desafios estão em [`docs/exercicio.md`](docs/exercicio.md).
 
 ## Pré-requisitos
 
-- Node.js (18+)
-- npm
+- Node.js 18 ou superior;
+- npm.
 
-## Executar a API
+## Executando localmente
+
+Em um terminal, inicie a API:
 
 ```bash
 cd api
@@ -21,17 +29,9 @@ npm install
 npm run dev
 ```
 
-A API sobe em `http://localhost:3000` e o WebSocket em `ws://localhost:3000/ws`.
+A API ficará disponível em `http://localhost:3000` e o WebSocket em `ws://localhost:3000/ws`.
 
-Para rodar os testes:
-
-```bash
-npm test
-```
-
-## Executar o frontend
-
-Em outro terminal:
+Em outro terminal, inicie o frontend:
 
 ```bash
 cd web
@@ -39,159 +39,184 @@ npm install
 npm run dev
 ```
 
-O frontend sobe em `http://localhost:5173`. Abra em duas abas (ou dois navegadores) com nomes
-diferentes pra ver o broadcast em tempo real entre elas.
+Abra a URL exibida pelo Vite, normalmente `http://localhost:5173`.
 
-## URLs
+## Comandos úteis
 
-- API: http://localhost:3000
-- WebSocket: ws://localhost:3000/ws
-- Frontend: http://localhost:5173
+Na API:
 
-## Protocolo do WebSocket
-
-Todo frame trocado é um único objeto JSON com um campo `type`.
-
-### Cliente → servidor
-
-| `type`  | Payload                    | Quando enviar                          |
-|---------|-----------------------------|-----------------------------------------|
-| `join`  | `{ type: "join", username, room }` | Uma vez, ao conectar, antes de tudo mais |
-| `switch_room` | `{ type: "switch_room", room }` | Ao trocar de sala                      |
-| `create_room` | `{ type: "create_room", name }` | Ao criar uma nova sala                 |
-| `rename_room` | `{ type: "rename_room", name }` | Ao renomear uma sala própria           |
-| `chat`  | `{ type: "chat", text }`     | A cada mensagem enviada no chat          |
-| `typing` | `{ type: "typing", isTyping }` | Ao começar e depois de parar de digitar |
-
-Toda mensagem `chat` é sempre transmitida (broadcast) para todo mundo. O agente **só**
-responde quando a mensagem menciona `@agente` (case-insensitive) - sem isso, ele fica calado,
-do jeito que qualquer bot de chat com "mention" costuma funcionar (ex.: `@bot` no Slack).
-
-### Servidor → cliente
-
-| `type`         | Payload                                              | O que significa                                   |
-|-----------------|-------------------------------------------------------|-----------------------------------------------------|
-| `system`        | `{ type: "system", text }`                             | Alguém entrou ou saiu do chat                       |
-| `chat`          | `{ type: "chat", id, username, text, createdAt }`       | Mensagem de um usuário, para todo mundo (inclusive quem enviou) |
-| `presence`      | `{ type: "presence", usernames }`                      | Lista atual de conexões online                      |
-| `rooms`         | `{ type: "rooms", rooms }`                             | Catálogo atual de salas                             |
-| `joined`        | `{ type: "joined", username, room }`                 | Confirma que o login foi aceito                    |
-| `error`         | `{ type: "error", message }`                           | Rejeição de uma ação                               |
-| `room_changed`  | `{ type: "room_changed", room }`                       | Confirma a troca de sala                           |
-| `room_renamed`  | `{ type: "room_renamed", oldName, newName }`           | Informa a mudança do nome de uma sala              |
-| `room_deleted`  | `{ type: "room_deleted", room, fallbackRoom }`        | Informa a exclusão e a sala de fallback            |
-| `typing`        | `{ type: "typing", username, isTyping }`              | Indica quem começou ou parou de digitar             |
-| `agent_start`   | `{ type: "agent_start", id }`                           | O agente começou a responder - abre uma bolha nova   |
-| `agent_chunk`   | `{ type: "agent_chunk", id, text }`                     | Um pedaço da resposta - concatene na bolha `id`      |
-| `agent_end`     | `{ type: "agent_end", id }`                             | A resposta do agente terminou                       |
-
-O trio `agent_start` / `agent_chunk` / `agent_end` não é acidental: é o mesmo formato que APIs
-de streaming de LLM usam (ex.: `message_start` / `content_block_delta` / `message_stop`). A
-ideia é que trocar `pickReply()` em `api/src/ws/agent.ts` por uma chamada de verdade a um
-modelo não muda o resto do fluxo.
-
-A checagem do mention (`mentionsAgent()`) fica no mesmo arquivo - é só um `includes("@agente")`
-depois de normalizar o texto para minúsculas.
-
-## Estrutura do projeto
-
-```
-04-streaming-websockets/
-├── Dockerfile                         # Empacota api + web num container só (ver docs/deploy.md)
-├── .dockerignore
-├── api/
-│   ├── src/
-│   │   ├── app.ts                     # Express app: /health + estáticos do web/ (deploy)
-│   │   ├── server.ts                  # HTTP server + WebSocket server + listen
-│   │   ├── middleware/
-│   │   │   ├── cors.ts
-│   │   │   └── request-logger.ts
-│   │   ├── ws/
-│   │   │   ├── protocol.ts            # Schemas (zod) e tipos do protocolo
-│   │   │   ├── connection-registry.ts # Quem está conectado + broadcast
-│   │   │   ├── heartbeat.ts           # Ping/pong keepalive
-│   │   │   ├── agent.ts               # Resposta simulada em streaming
-│   │   │   └── socket-server.ts       # Liga tudo: conexão, mensagens, disconnect
-│   │   └── utils/
-│   │       ├── logger.ts
-│   │       └── sleep.ts
-│   ├── tests/
-│   │   ├── health.test.ts
-│   │   ├── chat.test.ts               # Testes de integração via WebSocket de verdade
-│   │   └── helpers/
-│   ├── .env.example
-│   └── package.json
-│
-├── web/
-│   ├── src/
-│   │   ├── App.tsx                    # Tela de entrada + tela de chat
-│   │   ├── useChatSocket.ts           # Hook que fala com o WebSocket
-│   │   ├── types.ts
-│   │   └── main.tsx
-│   └── package.json
-│
-├── infra/                          # CDK: EC2 + Docker (deploy opcional na AWS)
-│   ├── bin/infra.ts
-│   └── lib/chat-demo-stack.ts
-│
-├── docs/
-│   ├── planejamento.md
-│   ├── slides.html
-│   ├── streaming-websockets.pptx
-│   ├── exercicio.md               # Exercício prático opcional (bloco 3)
-│   └── deploy.md                  # Passo a passo do deploy na AWS
-└── README.md
+```bash
+npm run build
+npm test
 ```
 
-## Notas
+No frontend:
 
-- Estado (usuários conectados) só existe em memória: reinicie a API e todo mundo precisa
-  entrar de novo.
-- As variáveis de ambiente são carregadas com [dotenvx](https://dotenvx.com)
-  (`@dotenvx/dotenvx`); sem um `.env`, os valores padrão do código (`PORT=3000`,
-  `CORS_ORIGIN=http://localhost:5173`) já bastam para rodar local.
-- O `/health` aceita apenas a origem definida em `CORS_ORIGIN`. O WebSocket faz a mesma checagem
-  de forma manual (via `verifyClient`), porque navegadores **não** aplicam CORS a conexões
-  WebSocket - diferente do `fetch`/XHR, o servidor precisa validar o header `Origin` sozinho.
-- Um heartbeat (ping/pong a cada 30s) derruba conexões que pararam de responder, em vez de
-  deixá-las penduradas para sempre.
-- O agente só responde quando a mensagem menciona `@agente` - sem isso ele fica quieto e a
-  mensagem só é transmitida entre os humanos, como em qualquer chat normal.
-- O que **não** está implementado de propósito - fica como o
-  [exercício prático opcional](./docs/exercicio.md): lista de usuários online, indicador
-  "digitando...", salas separadas, reconexão automática no cliente e mais.
+```bash
+npm run build
+npm run lint
+npx react-doctor@latest --verbose
+```
 
-## Testando sem a UI
+## Comportamento atual
 
-Com a API rodando, dá pra falar com o WebSocket diretamente pelo terminal com o
-[`wscat`](https://github.com/websockets/wscat):
+### Usuários
+
+O nome é validado pelo servidor e só é aceito depois do evento `joined`. Dois usuários ativos não podem usar o mesmo nome, sem diferenciação entre maiúsculas e minúsculas: `Luiz` e `luiz` entram em conflito. O nome original continua sendo exibido para o usuário.
+
+Ao desconectar, o nome é liberado. O estado é mantido apenas em memória, então ele também é perdido quando a API reinicia.
+
+### Salas
+
+Todo usuário entra inicialmente na sala `global`. O cliente recebe o catálogo de salas disponíveis e pode:
+
+- trocar de sala;
+- criar uma sala com um nome próprio;
+- renomear uma sala criada por ele;
+- excluir uma sala criada por ele.
+
+A sala `global` não pode ser renomeada nem excluída. Ao excluir uma sala, os usuários que estavam nela são movidos para `global` e o catálogo é atualizado.
+
+Mensagens, presença e indicador de digitação são enviados somente para os usuários da mesma sala. Não existe persistência de mensagens.
+
+### Reconexão
+
+O frontend tenta reconectar automaticamente após uma queda, usando espera progressiva de até 8 segundos. Ao reconectar, ele envia novamente o nome e a sala selecionada. As mensagens e indicadores temporários são limpos porque o servidor não armazena histórico.
+
+### Agente
+
+Uma mensagem contendo `@agente` inicia uma resposta simulada em partes. O servidor envia eventos de início, chunks de texto e fim, sempre para a sala atual.
+
+## Protocolo WebSocket
+
+Todos os frames são JSON.
+
+### Cliente para servidor
+
+| Evento | Exemplo | Finalidade |
+| --- | --- | --- |
+| `join` | `{ "type": "join", "username": "Luiz", "room": "global" }` | Entra no chat; `room` é opcional e por padrão é `global`. |
+| `switch_room` | `{ "type": "switch_room", "room": "backend" }` | Troca para uma sala existente. |
+| `create_room` | `{ "type": "create_room", "name": "backend" }` | Cria uma sala e entra nela. |
+| `rename_room` | `{ "type": "rename_room", "name": "backend-2" }` | Renomeia uma sala que pertence ao usuário. |
+| `delete_room` | `{ "type": "delete_room", "name": "backend" }` | Exclui uma sala que pertence ao usuário. |
+| `chat` | `{ "type": "chat", "text": "Olá" }` | Envia uma mensagem para a sala atual. |
+| `typing` | `{ "type": "typing", "isTyping": true }` | Informa que o usuário começou ou parou de digitar. |
+
+O cliente aplica debounce no evento `typing`; portanto, digitar uma palavra não gera um evento para cada tecla.
+
+### Servidor para cliente
+
+| Evento | Finalidade |
+| --- | --- |
+| `joined` | Confirma que o nome foi aceito e informa a sala atual. |
+| `system` | Exibe avisos de entrada, saída ou alteração de sala. |
+| `chat` | Entrega uma mensagem da sala atual. |
+| `presence` | Atualiza a lista de usuários da sala. |
+| `rooms` | Envia o catálogo de salas disponíveis. |
+| `room_changed` | Confirma uma troca de sala. |
+| `room_renamed` | Informa que uma sala foi renomeada. |
+| `room_deleted` | Informa que uma sala foi excluída. |
+| `typing` | Atualiza o indicador de digitação de outro usuário. |
+| `agent_start` / `agent_chunk` / `agent_end` | Controlam a resposta em streaming do agente. |
+| `error` | Informa uma operação inválida ou rejeitada. |
+
+O servidor envia `error` para nomes duplicados, nomes ou salas inválidos e operações sem permissão, como tentar excluir a sala de outra pessoa.
+
+## Limites de segurança atuais
+
+As proteções implementadas nesta etapa são:
+
+- payload WebSocket de até 8 KiB;
+- no máximo 100 conexões ativas;
+- no máximo 10 conexões simultâneas por IP;
+- no máximo 30 mensagens por janela de 10 segundos, controlado por socket e por IP;
+- fechamento de clientes que acumulam mais de 256 KiB de dados pendentes;
+- heartbeat para detectar conexões abandonadas;
+- validação da origem permitida e dos campos antes de processar a operação.
+
+Os limites de usuário, sala e mensagem também são aplicados no protocolo. O estado continua em memória e ainda não há autenticação, persistência ou distribuição entre múltiplas instâncias.
+
+## Testando sem o frontend
+
+Com a API rodando, instale ou execute o `wscat`:
 
 ```bash
 npx wscat -c ws://localhost:3000/ws
 ```
 
-Depois de conectar, cole (uma linha por vez):
+Envie um primeiro login:
 
 ```json
-{"type":"join","username":"alice"}
+{"type":"join","username":"alice","room":"global"}
 ```
+
+Depois teste uma mensagem:
 
 ```json
-{"type":"chat","text":"oi @agente, tudo bem?"}
+{"type":"chat","text":"Olá, sala global"}
 ```
 
-Você deve ver de volta o `system` de entrada, o `chat` da própria mensagem e, em seguida, os
-eventos `agent_start`, vários `agent_chunk` e `agent_end` chegando um a um - só porque a
-mensagem mencionou `@agente`. Mande uma mensagem sem a menção e repare que só o `chat` volta,
-sem o agente. Inclua "pagamento" junto com `@agente` para ver a resposta temática.
+Para testar o conflito de nomes, abra uma segunda conexão e envie `ALICE`. O servidor deve rejeitá-la porque a comparação não diferencia maiúsculas de minúsculas.
 
-Abra uma segunda aba do `wscat` (com outro `username`) para ver o broadcast entre duas
-conexões.
+Para testar salas, use a conexão do proprietário:
 
-## Deploy na AWS (opcional)
+```json
+{"type":"create_room","name":"estudos"}
+{"type":"rename_room","name":"backend"}
+{"type":"switch_room","room":"global"}
+{"type":"switch_room","room":"backend"}
+{"type":"delete_room","name":"backend"}
+```
 
-Pra deixar uma sala compartilhada no ar durante o workshop (todo mundo entrando pela mesma
-URL), tem um app CDK em [`infra/`](./infra) que sobe uma única instância EC2 rodando o mesmo
-código deste repositório, sem alterações de comportamento. Não é necessário pros alunos
-rodarem - é infraestrutura do instrutor. Ver o passo a passo completo em
-[`docs/deploy.md`](./docs/deploy.md).
+Para testar o agente:
+
+```json
+{"type":"chat","text":"@agente qual o status do pagamento?"}
+```
+
+Para executar os testes automatizados da API:
+
+```bash
+cd api
+npm test -- --runInBand
+```
+
+## Estrutura
+
+```text
+.
+├── api/
+│   ├── src/
+│   │   ├── middleware/
+│   │   ├── utils/
+│   │   ├── ws/
+│   │   ├── app.ts
+│   │   └── server.ts
+│   └── tests/
+├── web/
+│   ├── src/
+│   │   ├── App.tsx
+│   │   ├── index.css
+│   │   ├── main.tsx
+│   │   ├── types.ts
+│   │   └── useChatSocket.ts
+│   ├── index.html
+│   └── vite.config.ts
+├── infra/
+│   └── lib/chat-demo-stack.ts
+├── docs/
+│   ├── deploy.md
+│   ├── exercicio.md
+│   └── planejamento.md
+├── Dockerfile
+└── README.md
+```
+
+## Deploy
+
+As instruções de infraestrutura e deploy estão em [`docs/deploy.md`](docs/deploy.md). O `Dockerfile` usa build em múltiplas etapas para compilar a API e executar o servidor com Node.js.
+
+## Escopo futuro
+
+O desafio 4 foi pulado por decisão do projeto. Como próximos aprimoramentos de segurança, ainda podem ser adicionados expiração e limite de salas, catálogo incremental, limite de streams concorrentes do agente e limpeza do histórico no frontend.
