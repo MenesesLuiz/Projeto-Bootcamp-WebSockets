@@ -206,6 +206,23 @@ h1 {
   cursor: not-allowed;
 }
 
+.room-delete-button {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: #fff;
+  color: #b91c1c;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.room-delete-button:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
 .room-error {
   margin: 0.5rem 0 0;
   color: #b91c1c;

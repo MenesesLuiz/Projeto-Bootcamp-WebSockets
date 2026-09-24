@@ -35,6 +35,10 @@ function renameRoom(socket: WebSocket, name: string): void {
   socket.send(JSON.stringify({ type: "rename_room", name }));
 }
 
+function deleteRoom(socket: WebSocket, name: string): void {
+  socket.send(JSON.stringify({ type: "delete_room", name }));
+}
+
 describe("chat WebSocket", () => {
   let server: TestServer;
   let sockets: WebSocket[];
@@ -235,6 +239,45 @@ describe("chat WebSocket", () => {
     await expect(alice.events.waitFor((event) => event.type === "error")).resolves.toEqual({
       type: "error",
       message: "A sala global nao pode ser renomeada",
+    });
+  });
+
+  it("deletes a room, moves its users to global, and updates the catalog", async () => {
+    const alice = await openClient("alice");
+    createRoom(alice.socket, "workshop");
+    await alice.events.waitFor((event) => event.type === "rooms" && event.rooms.includes("workshop"));
+    switchRoom(alice.socket, "workshop");
+    await alice.events.waitFor((event) => event.type === "room_changed" && event.room === "workshop");
+    const bob = await openClient("bob", "workshop");
+
+    deleteRoom(alice.socket, "workshop");
+
+    await alice.events.waitFor((event) => event.type === "room_changed" && event.room === "global");
+    await bob.events.waitFor((event) => event.type === "room_changed" && event.room === "global");
+    const deleted = await bob.events.waitFor((event) => event.type === "room_deleted");
+    expect(deleted).toEqual({ type: "room_deleted", room: "workshop", fallbackRoom: "global" });
+    await bob.events.waitFor((event) => event.type === "rooms" && !event.rooms.includes("workshop"));
+
+    expect(server.chat.registry.getRoom("workshop")).toBeUndefined();
+    expect(server.chat.registry.getUsernames("global")).toEqual(expect.arrayContaining(["alice", "bob"]));
+  });
+
+  it("rejects room deletion by non-owners and protects global", async () => {
+    const alice = await openClient("alice");
+    createRoom(alice.socket, "workshop");
+    await alice.events.waitFor((event) => event.type === "rooms" && event.rooms.includes("workshop"));
+    const bob = await openClient("bob", "workshop");
+
+    deleteRoom(bob.socket, "workshop");
+    await expect(bob.events.waitFor((event) => event.type === "error")).resolves.toEqual({
+      type: "error",
+      message: "Apenas o proprietario pode excluir esta sala",
+    });
+
+    deleteRoom(alice.socket, "global");
+    await expect(alice.events.waitFor((event) => event.type === "error")).resolves.toEqual({
+      type: "error",
+      message: "A sala global nao pode ser excluida",
     });
   });
 

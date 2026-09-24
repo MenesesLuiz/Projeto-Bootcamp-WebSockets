@@ -79,6 +79,7 @@ do jeito que qualquer bot de chat com "mention" costuma funcionar (ex.: `@bot` n
 | `error`         | `{ type: "error", message }`                           | Rejeição de uma ação                               |
 | `room_changed`  | `{ type: "room_changed", room }`                       | Confirma a troca de sala                           |
 | `room_renamed`  | `{ type: "room_renamed", oldName, newName }`           | Informa a mudança do nome de uma sala              |
+| `room_deleted`  | `{ type: "room_deleted", room, fallbackRoom }`        | Informa a exclusão e a sala de fallback            |
 | `typing`        | `{ type: "typing", username, isTyping }`              | Indica quem começou ou parou de digitar             |
 | `agent_start`   | `{ type: "agent_start", id }`                           | O agente começou a responder - abre uma bolha nova   |
 | `agent_chunk`   | `{ type: "agent_chunk", id, text }`                     | Um pedaço da resposta - concatene na bolha `id`      |

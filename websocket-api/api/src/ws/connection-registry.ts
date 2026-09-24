@@ -13,6 +13,11 @@ export type ChatRoom = {
   ownerId?: string;
 };
 
+export type DeletedRoom = {
+  name: string;
+  affectedClients: Array<{ socket: WebSocket; client: ChatClient }>;
+};
+
 /**
  * Tracks connected sockets and broadcasts events to all of them. This is
  * the in-memory equivalent of the `expenses` array from the REST workshop:
@@ -81,6 +86,18 @@ export class ConnectionRegistry {
     return true;
   }
 
+  deleteRoom(name: string, ownerId: string): DeletedRoom | undefined {
+    const room = this.rooms.get(this.roomKey(name));
+    if (!room || room.name === "global" || room.ownerId !== ownerId) return undefined;
+
+    const affectedClients = this.clientsInRoom(room.name);
+    this.rooms.delete(this.roomKey(room.name));
+
+    for (const { client } of affectedClients) client.room = "global";
+
+    return { name: room.name, affectedClients };
+  }
+
   unregister(socket: WebSocket): ChatClient | undefined {
     const client = this.clients.get(socket);
     this.clients.delete(socket);
@@ -122,5 +139,11 @@ export class ConnectionRegistry {
 
   private usernameKey(username: string): string {
     return username.trim().toLocaleLowerCase();
+  }
+
+  private clientsInRoom(room: string): Array<{ socket: WebSocket; client: ChatClient }> {
+    return [...this.clients.entries()]
+      .filter(([, client]) => client.room === room)
+      .map(([socket, client]) => ({ socket, client }));
   }
 }

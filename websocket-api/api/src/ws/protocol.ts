@@ -32,6 +32,11 @@ export const renameRoomMessageSchema = z.object({
   name: roomNameSchema,
 });
 
+export const deleteRoomMessageSchema = z.object({
+  type: z.literal("delete_room"),
+  name: roomNameSchema,
+});
+
 export const chatMessageSchema = z.object({
   type: z.literal("chat"),
   text: z.string().trim().min(1, "Message text is required").max(500, "Message is too long"),
@@ -47,6 +52,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   switchRoomMessageSchema,
   createRoomMessageSchema,
   renameRoomMessageSchema,
+  deleteRoomMessageSchema,
   chatMessageSchema,
   typingMessageSchema,
 ]);
@@ -127,6 +133,12 @@ export type RoomRenamedEvent = {
   newName: string;
 };
 
+export type RoomDeletedEvent = {
+  type: "room_deleted";
+  room: string;
+  fallbackRoom: "global";
+};
+
 /**
  * The agent's reply streams as three events - start, one or more chunks,
  * end - the same shape real LLM streaming APIs use (e.g. a message start,
@@ -146,6 +158,7 @@ export type ServerEvent =
   | ErrorEvent
   | RoomChangedEvent
   | RoomRenamedEvent
+  | RoomDeletedEvent
   | TypingEvent
   | AgentStartEvent
   | AgentChunkEvent

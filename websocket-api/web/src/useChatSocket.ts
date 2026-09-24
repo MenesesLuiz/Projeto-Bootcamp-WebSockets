@@ -137,6 +137,18 @@ export function useChatSocket() {
         return;
       }
 
+      if (serverEvent.type === "room_deleted") {
+        setAvailableRooms((current) => current.filter((room) => room !== serverEvent.room));
+        if (roomRef.current === serverEvent.room) {
+          roomRef.current = serverEvent.fallbackRoom;
+          setCurrentRoom(serverEvent.fallbackRoom);
+          setBubbles([]);
+          setOnlineUsers([]);
+          setTypingUsers([]);
+        }
+        return;
+      }
+
       if (serverEvent.type === "rooms") {
         setAvailableRooms(serverEvent.rooms);
         setRoomError("");
@@ -256,6 +268,11 @@ export function useChatSocket() {
     socketRef.current?.send(JSON.stringify({ type: "rename_room", name }));
   }, []);
 
+  const deleteRoom = useCallback((name: string) => {
+    setRoomError("");
+    socketRef.current?.send(JSON.stringify({ type: "delete_room", name }));
+  }, []);
+
   const sendChat = useCallback((text: string) => {
     socketRef.current?.send(JSON.stringify({ type: "chat", text }));
   }, []);
@@ -303,6 +320,7 @@ export function useChatSocket() {
     switchRoom,
     createRoom,
     renameRoom,
+    deleteRoom,
     sendChat,
     setTyping,
   };

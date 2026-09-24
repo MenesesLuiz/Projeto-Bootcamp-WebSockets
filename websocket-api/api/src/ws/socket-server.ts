@@ -117,6 +117,40 @@ export function createChatServer(server: HttpServer): ChatServer {
       return;
     }
 
+    if (message.type === "delete_room") {
+      const room = registry.getRoom(message.name);
+      if (!room) {
+        sendEvent(socket, { type: "error", message: `Sala inexistente: ${message.name}` });
+        return;
+      }
+      if (room.name === "global") {
+        sendEvent(socket, { type: "error", message: "A sala global nao pode ser excluida" });
+        return;
+      }
+      if (room.ownerId !== client.id) {
+        sendEvent(socket, { type: "error", message: "Apenas o proprietario pode excluir esta sala" });
+        return;
+      }
+
+      const deletedRoom = registry.deleteRoom(room.name, client.id);
+      if (!deletedRoom) {
+        sendEvent(socket, { type: "error", message: "Nao foi possivel excluir a sala" });
+        return;
+      }
+
+      for (const { socket: affectedSocket } of deletedRoom.affectedClients) {
+        sendEvent(affectedSocket, { type: "room_changed", room: "global" });
+      }
+      registry.broadcastToAll({ type: "room_deleted", room: deletedRoom.name, fallbackRoom: "global" });
+      registry.broadcastToRoom("global", {
+        type: "system",
+        text: `A sala ${deletedRoom.name} foi excluida; usuarios retornaram para a global`,
+      });
+      broadcastPresence("global");
+      broadcastRooms();
+      return;
+    }
+
     if (message.type === "switch_room") {
       if (!registry.hasRoom(message.room)) {
         sendEvent(socket, { type: "error", message: `Sala inexistente: ${message.room}` });

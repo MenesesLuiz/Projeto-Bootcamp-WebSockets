@@ -18,6 +18,7 @@ function App() {
     switchRoom,
     createRoom,
     renameRoom,
+    deleteRoom,
     sendChat,
     setTyping,
   } = useChatSocket();
@@ -72,6 +73,12 @@ function App() {
     if (!trimmed || currentRoom === DEFAULT_ROOM) return;
     renameRoom(trimmed);
     setRenameRoomName("");
+  }
+
+  function handleDeleteRoom() {
+    if (currentRoom === DEFAULT_ROOM) return;
+    if (!window.confirm(`Excluir a sala ${currentRoom}? Os usuarios serao movidos para a sala global.`)) return;
+    deleteRoom(currentRoom);
   }
 
   if (!joined) {
@@ -149,19 +156,29 @@ function App() {
             </button>
           </form>
           {currentRoom !== DEFAULT_ROOM && (
-            <form onSubmit={handleRenameRoom} className="room-rename-form">
-              <input
-                type="text"
-                placeholder="Novo nome da sala"
-                value={renameRoomName}
-                onChange={(event) => setRenameRoomName(event.target.value)}
-                maxLength={24}
-                aria-label="Novo nome da sala"
-              />
-              <button type="submit" disabled={status !== "open" || !renameRoomName.trim()}>
-                Renomear sala
+            <>
+              <form onSubmit={handleRenameRoom} className="room-rename-form">
+                <input
+                  type="text"
+                  placeholder="Novo nome da sala"
+                  value={renameRoomName}
+                  onChange={(event) => setRenameRoomName(event.target.value)}
+                  maxLength={24}
+                  aria-label="Novo nome da sala"
+                />
+                <button type="submit" disabled={status !== "open" || !renameRoomName.trim()}>
+                  Renomear sala
+                </button>
+              </form>
+              <button
+                type="button"
+                className="room-delete-button"
+                onClick={handleDeleteRoom}
+                disabled={status !== "open"}
+              >
+                Excluir sala
               </button>
-            </form>
+            </>
           )}
           {roomError && <p className="room-error">{roomError}</p>}
         </div>

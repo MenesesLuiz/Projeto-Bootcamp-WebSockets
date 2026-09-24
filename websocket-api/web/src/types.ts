@@ -8,6 +8,7 @@ export type ServerEvent =
   | { type: "error"; message: string }
   | { type: "room_changed"; room: string }
   | { type: "room_renamed"; oldName: string; newName: string }
+  | { type: "room_deleted"; room: string; fallbackRoom: "global" }
   | { type: "typing"; username: string; isTyping: boolean }
   | { type: "agent_start"; id: string }
   | { type: "agent_chunk"; id: string; text: string }
