@@ -216,7 +216,3 @@ npm test -- --runInBand
 ## Deploy
 
 As instruções de infraestrutura e deploy estão em [`docs/deploy.md`](docs/deploy.md). O `Dockerfile` usa build em múltiplas etapas para compilar a API e executar o servidor com Node.js.
-
-## Escopo futuro
-
-O desafio 4 foi pulado por decisão do projeto. Como próximos aprimoramentos de segurança, ainda podem ser adicionados expiração e limite de salas, catálogo incremental, limite de streams concorrentes do agente e limpeza do histórico no frontend.
