@@ -16,6 +16,7 @@ function App() {
     join,
     switchRoom,
     createRoom,
+    renameRoom,
     sendChat,
     setTyping,
   } = useChatSocket();
@@ -23,6 +24,7 @@ function App() {
   const [hasJoined, setHasJoined] = useState(false);
   const [draft, setDraft] = useState("");
   const [newRoomName, setNewRoomName] = useState("");
+  const [renameRoomName, setRenameRoomName] = useState("");
   const listRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
@@ -63,6 +65,14 @@ function App() {
     if (!trimmed) return;
     createRoom(trimmed);
     setNewRoomName("");
+  }
+
+  function handleRenameRoom(event: FormEvent) {
+    event.preventDefault();
+    const trimmed = renameRoomName.trim();
+    if (!trimmed || currentRoom === DEFAULT_ROOM) return;
+    renameRoom(trimmed);
+    setRenameRoomName("");
   }
 
   if (!hasJoined) {
@@ -136,6 +146,21 @@ function App() {
               Criar sala
             </button>
           </form>
+          {currentRoom !== DEFAULT_ROOM && (
+            <form onSubmit={handleRenameRoom} className="room-rename-form">
+              <input
+                type="text"
+                placeholder="Novo nome da sala"
+                value={renameRoomName}
+                onChange={(event) => setRenameRoomName(event.target.value)}
+                maxLength={24}
+                aria-label="Novo nome da sala"
+              />
+              <button type="submit" disabled={status !== "open" || !renameRoomName.trim()}>
+                Renomear sala
+              </button>
+            </form>
+          )}
           {roomError && <p className="room-error">{roomError}</p>}
         </div>
       </aside>

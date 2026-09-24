@@ -31,6 +31,10 @@ function createRoom(socket: WebSocket, name: string): void {
   socket.send(JSON.stringify({ type: "create_room", name }));
 }
 
+function renameRoom(socket: WebSocket, name: string): void {
+  socket.send(JSON.stringify({ type: "rename_room", name }));
+}
+
 describe("chat WebSocket", () => {
   let server: TestServer;
   let sockets: WebSocket[];
@@ -99,7 +103,9 @@ describe("chat WebSocket", () => {
   it("keeps chat and agent events inside the sender's room", async () => {
     const alice = await openClient("alice", "global");
     const carol = await openClient("carol", "global");
-    const bob = await openClient("bob", "sala-2");
+    createRoom(alice.socket, "private-room");
+    await alice.events.waitFor((event) => event.type === "rooms" && event.rooms.includes("private-room"));
+    const bob = await openClient("bob", "private-room");
 
     say(bob.socket, "mensagem privada da sala");
     await expect(
@@ -118,19 +124,21 @@ describe("chat WebSocket", () => {
   it("moves a client between rooms and updates each room's presence", async () => {
     const alice = await openClient("alice", "global");
     const bob = await openClient("bob", "global");
-    const carol = await openClient("carol", "sala-2");
+    createRoom(alice.socket, "room-to-join");
+    await alice.events.waitFor((event) => event.type === "rooms" && event.rooms.includes("room-to-join"));
+    const carol = await openClient("carol", "room-to-join");
 
-    switchRoom(alice.socket, "sala-2");
+    switchRoom(alice.socket, "room-to-join");
 
     const changed = await alice.events.waitFor((event) => event.type === "room_changed");
-    expect(changed).toEqual({ type: "room_changed", room: "sala-2" });
+    expect(changed).toEqual({ type: "room_changed", room: "room-to-join" });
 
     await bob.events.waitFor((event) => event.type === "system" && event.text === "alice saiu do chat");
     await carol.events.waitFor((event) => event.type === "system" && event.text === "alice entrou no chat");
 
-    say(alice.socket, "agora estou na sala 2");
+    say(alice.socket, "agora estou na nova sala");
     const received = await carol.events.waitFor((event) => event.type === "chat");
-    expect(received).toMatchObject({ username: "alice", text: "agora estou na sala 2" });
+    expect(received).toMatchObject({ username: "alice", text: "agora estou na nova sala" });
     await expect(
       bob.events.waitFor((event) => event.type === "chat" && event.username === "alice", 250),
     ).rejects.toThrow();
@@ -149,8 +157,12 @@ describe("chat WebSocket", () => {
       (event) => event.type === "rooms" && event.rooms.includes("workshop"),
     );
 
-    expect(aliceRooms).toMatchObject({ rooms: ["global", "sala-2", "workshop"] });
-    expect(bobRooms).toMatchObject({ rooms: ["global", "sala-2", "workshop"] });
+    expect(aliceRooms).toMatchObject({ rooms: ["global", "workshop"] });
+    expect(bobRooms).toMatchObject({ rooms: ["global", "workshop"] });
+    expect(server.chat.registry.getRoom("workshop")).toMatchObject({
+      name: "workshop",
+      ownerId: expect.any(String),
+    });
   });
 
   it("rejects duplicate room names without changing the catalog", async () => {
@@ -163,6 +175,46 @@ describe("chat WebSocket", () => {
     createRoom(bob.socket, "workshop");
     const error = await bob.events.waitFor((event) => event.type === "error");
     expect(error).toEqual({ type: "error", message: "A sala workshop já existe" });
+  });
+
+  it("renames a room and updates every client that is inside it", async () => {
+    const alice = await openClient("alice");
+    createRoom(alice.socket, "workshop");
+    await alice.events.waitFor((event) => event.type === "rooms" && event.rooms.includes("workshop"));
+    switchRoom(alice.socket, "workshop");
+    await alice.events.waitFor((event) => event.type === "room_changed");
+    const bob = await openClient("bob", "workshop");
+
+    renameRoom(alice.socket, "backend");
+
+    const renamed = await bob.events.waitFor((event) => event.type === "room_renamed");
+    expect(renamed).toEqual({ type: "room_renamed", oldName: "workshop", newName: "backend" });
+    await bob.events.waitFor((event) => event.type === "rooms" && event.rooms.includes("backend"));
+
+    say(bob.socket, "mensagem depois da renomeacao");
+    const received = await alice.events.waitFor((event) => event.type === "chat");
+    expect(received).toMatchObject({ username: "bob", text: "mensagem depois da renomeacao" });
+    expect(server.chat.registry.getRoom("backend")).toMatchObject({ name: "backend" });
+    expect(server.chat.registry.getRoom("workshop")).toBeUndefined();
+  });
+
+  it("allows only the room owner to rename it and protects global", async () => {
+    const alice = await openClient("alice");
+    createRoom(alice.socket, "workshop");
+    await alice.events.waitFor((event) => event.type === "rooms" && event.rooms.includes("workshop"));
+    const bob = await openClient("bob", "workshop");
+
+    renameRoom(bob.socket, "not-allowed");
+    await expect(bob.events.waitFor((event) => event.type === "error")).resolves.toEqual({
+      type: "error",
+      message: "Apenas o proprietario pode renomear esta sala",
+    });
+
+    renameRoom(alice.socket, "renamed-global");
+    await expect(alice.events.waitFor((event) => event.type === "error")).resolves.toEqual({
+      type: "error",
+      message: "A sala global nao pode ser renomeada",
+    });
   });
 
   it("relays typing status to everyone except the sender", async () => {

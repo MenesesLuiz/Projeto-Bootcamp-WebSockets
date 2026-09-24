@@ -58,6 +58,14 @@ export function useChatSocket() {
         return;
       }
 
+      if (serverEvent.type === "room_renamed") {
+        setCurrentRoom((current) => (current === serverEvent.oldName ? serverEvent.newName : current));
+        setAvailableRooms((current) =>
+          current.map((room) => (room === serverEvent.oldName ? serverEvent.newName : room)),
+        );
+        return;
+      }
+
       if (serverEvent.type === "rooms") {
         setAvailableRooms(serverEvent.rooms);
         setRoomError("");
@@ -159,6 +167,11 @@ export function useChatSocket() {
     socketRef.current?.send(JSON.stringify({ type: "create_room", name }));
   }, []);
 
+  const renameRoom = useCallback((name: string) => {
+    setRoomError("");
+    socketRef.current?.send(JSON.stringify({ type: "rename_room", name }));
+  }, []);
+
   const sendChat = useCallback((text: string) => {
     socketRef.current?.send(JSON.stringify({ type: "chat", text }));
   }, []);
@@ -204,6 +217,7 @@ export function useChatSocket() {
     join,
     switchRoom,
     createRoom,
+    renameRoom,
     sendChat,
     setTyping,
   };

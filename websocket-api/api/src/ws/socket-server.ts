@@ -68,11 +68,39 @@ export function createChatServer(server: HttpServer): ChatServer {
     }
 
     if (message.type === "create_room") {
-      const room = registry.createRoom(message.name);
+      const room = registry.createRoom(message.name, client.id);
       if (!room) {
         sendEvent(socket, { type: "error", message: `A sala ${message.name} já existe` });
         return;
       }
+      broadcastRooms();
+      return;
+    }
+
+    if (message.type === "rename_room") {
+      if (client.room === "global") {
+        sendEvent(socket, { type: "error", message: "A sala global nao pode ser renomeada" });
+        return;
+      }
+
+      const room = registry.getRoom(client.room);
+      if (!room || room.ownerId !== client.id) {
+        sendEvent(socket, { type: "error", message: "Apenas o proprietario pode renomear esta sala" });
+        return;
+      }
+
+      if (registry.hasRoom(message.name)) {
+        sendEvent(socket, { type: "error", message: `A sala ${message.name} ja existe` });
+        return;
+      }
+
+      const oldName = client.room;
+      if (!registry.renameRoom(oldName, message.name, client.id)) {
+        sendEvent(socket, { type: "error", message: "Nao foi possivel renomear a sala" });
+        return;
+      }
+
+      registry.broadcastToAll({ type: "room_renamed", oldName, newName: message.name });
       broadcastRooms();
       return;
     }
